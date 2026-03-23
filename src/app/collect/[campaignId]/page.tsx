@@ -74,6 +74,13 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
         });
       }
 
+      // Notify owner
+      await fetch('/api/emails/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testimonialId: testimonial.id }),
+      });
+
       setStep('done');
     } catch (err: any) {
       setError(err.message);

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
+import { SendRequestForm } from '@/components/SendRequestForm';
 
 export default async function CampaignPage({ params }: { params: { id: string } }) {
   const { id } = await params;
@@ -42,6 +43,25 @@ export default async function CampaignPage({ params }: { params: { id: string } 
         </div>
         <p className="text-xs text-zinc-400 mt-2">Share this link with your customers to collect testimonials</p>
       </div>
+
+      {/* Embed code */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-5 mb-6">
+        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Wall of Love embed</p>
+        <p className="text-xs text-zinc-400 mb-3">Paste this snippet anywhere on your website to show approved testimonials</p>
+        <div className="relative">
+          <pre className="text-xs text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre-wrap">
+            {`<div data-testimonial-campaign="${campaign.id}" data-origin="${process.env.NEXT_PUBLIC_APP_URL}"></div>
+<script src="${process.env.NEXT_PUBLIC_APP_URL}/embed.js"></script>`}
+          </pre>
+        </div>
+        <div className="mt-2 flex justify-end">
+          <CopyButton
+            text={`<div data-testimonial-campaign="${campaign.id}" data-origin="${process.env.NEXT_PUBLIC_APP_URL}"></div>\n<script src="${process.env.NEXT_PUBLIC_APP_URL}/embed.js"></script>`}
+          />
+        </div>
+      </div>
+
+      <SendRequestForm campaignId={campaign.id} />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
