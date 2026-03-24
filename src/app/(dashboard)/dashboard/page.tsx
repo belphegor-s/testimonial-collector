@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function DashboardPage() {
@@ -30,7 +31,7 @@ export default async function DashboardPage() {
               className="bg-white border border-zinc-200 rounded-xl p-5 flex items-center justify-between hover:border-zinc-300 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ backgroundColor: campaign.brand_color + '22' }}>
+                <div className="w-8 h-8 rounded-lg shrink-0" style={{ backgroundColor: campaign.brand_color + '22' }}>
                   <div className="w-full h-full rounded-lg flex items-center justify-center">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: campaign.brand_color }} />
                   </div>
@@ -40,7 +41,9 @@ export default async function DashboardPage() {
                   <p className="text-xs text-zinc-400 mt-0.5">Created {new Date(campaign.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
-              <span className="text-xs text-zinc-400 group-hover:text-zinc-600 transition-colors">View →</span>
+              <span className="text-xs text-zinc-400 group-hover:text-zinc-600 transition-colors flex items-center gap-2">
+                View <ArrowRight size={14} />
+              </span>
             </Link>
           ))}
         </div>

@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  images: {
+    remotePatterns: [new URL('https://urizlqjfhsekknbzzric.supabase.co/storage/**')],
+  },
 };
 
 export default nextConfig;

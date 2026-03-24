@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
 import { SendRequestForm } from '@/components/SendRequestForm';
+import { ArrowLeft } from 'lucide-react';
 
 export default async function CampaignPage({ params }: { params: { id: string } }) {
   const { id } = await params;
@@ -21,8 +22,8 @@ export default async function CampaignPage({ params }: { params: { id: string } 
   return (
     <div>
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-600 transition-colors">
-          ← Back
+        <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-2">
+          <ArrowLeft size={14} /> Back
         </Link>
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-3">
@@ -30,6 +31,18 @@ export default async function CampaignPage({ params }: { params: { id: string } 
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: campaign.brand_color }} />
             </div>
             <h1 className="text-lg font-semibold text-zinc-900">{campaign.name}</h1>
+            <Link
+              href={`/dashboard/campaigns/${campaign.id}/builder`}
+              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
+            >
+              Edit form
+            </Link>
+            <Link
+              href={`/dashboard/campaigns/${campaign.id}/settings`}
+              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
+            >
+              Settings
+            </Link>
           </div>
         </div>
       </div>
