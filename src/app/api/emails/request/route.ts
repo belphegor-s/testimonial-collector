@@ -1,6 +1,6 @@
 import { resend } from '@/lib/resend';
 import { createClient } from '@/lib/supabase/server';
-import { FROM_EMAIL } from '../emails/notify/route';
+import { FROM_EMAIL } from '../notify/route';
 
 export async function POST(req: Request) {
   const { campaignId, customerEmail, customerName } = await req.json();
