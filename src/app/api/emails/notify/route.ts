@@ -1,12 +1,12 @@
 import { resend } from '@/lib/resend';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const FROM_EMAIL = 'Ayush Sharma <hello@ayushsharma.me>';
 
 export async function POST(req: Request) {
   const { testimonialId } = await req.json();
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: testimonial } = await supabase.from('testimonials').select('*, campaigns(name, owner_id)').eq('id', testimonialId).single();
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.admin.getUserById(testimonial.campaigns.owner_id);
 
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${testimonial.campaign_id}`;
 

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 const anthropic = new Anthropic();
 
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
   const summary = msg.content[0].type === 'text' ? msg.content[0].text : '';
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   await supabase.from('testimonials').update({ ai_summary: summary }).eq('id', id);
 
   return Response.json({ summary });

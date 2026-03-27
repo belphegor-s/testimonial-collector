@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(_: Request, { params }: { params: Promise<{ campaignId: string }> }) {
   const { campaignId } = await params;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data } = await supabase
     .from('testimonials')

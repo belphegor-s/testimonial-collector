@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { FormBlock, DEFAULT_SCHEMA } from '@/types/form';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Star } from 'lucide-react';
 import Image from 'next/image';
 
 export default function CollectPage({ params }: { params: Promise<{ campaignId: string }> }) {
-  const supabase = createClient();
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [campaign, setCampaign] = useState<any>(null);
   const [schema, setSchema] = useState<FormBlock[]>([]);
@@ -17,12 +15,15 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
   const [step, setStep] = useState<'form' | 'done'>('form');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     params.then(async ({ campaignId: id }) => {
       setCampaignId(id);
-      const { data } = await supabase.from('campaigns').select('*').eq('id', id).single();
+      const res = await fetch(`/api/collect/${id}`);
+      if (!res.ok) { setError('Campaign not found'); return; }
+      const data = await res.json();
       setCampaign(data);
       setSchema(data?.form_schema?.length ? data.form_schema : DEFAULT_SCHEMA);
     });
@@ -30,64 +31,63 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
 
   function set(id: string, val: any) {
     setFormValues((v) => ({ ...v, [id]: val }));
+    if (fieldErrors[id]) setFieldErrors((e) => { const next = { ...e }; delete next[id]; return next; });
+  }
+
+  function validate(): Record<string, string> {
+    const errors: Record<string, string> = {};
+    for (const block of schema) {
+      if (!block.required || block.type === 'section') continue;
+      const val = formValues[block.id];
+      if (block.type === 'consent') {
+        if (!val) errors[block.id] = 'This field is required';
+      } else if (block.type === 'rating') {
+        if (val == null || val === 0) errors[block.id] = 'Please select a rating';
+      } else if (block.type === 'nps') {
+        if (val == null) errors[block.id] = 'Please select a score';
+      } else if (block.type === 'select') {
+        const isMulti = block.placeholder === 'multi';
+        if (isMulti ? !val?.length : !val) errors[block.id] = 'Please select an option';
+      } else if (block.type === 'number') {
+        if (val === '' || val == null) {
+          errors[block.id] = 'This field is required';
+        } else {
+          const num = Number(val);
+          if (block.min != null && num < block.min) errors[block.id] = `Minimum value is ${block.min}`;
+          if (block.max != null && num > block.max) errors[block.id] = `Maximum value is ${block.max}`;
+        }
+      } else {
+        if (!val || (typeof val === 'string' && !val.trim())) errors[block.id] = 'This field is required';
+      }
+    }
+    return errors;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!campaignId) return;
+
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      let video_url = null;
+      const body = new FormData();
+      body.append('formValues', JSON.stringify(formValues));
+      body.append('schema', JSON.stringify(schema));
+      if (videoFile) body.append('video', videoFile);
 
-      if (videoFile) {
-        const ext = videoFile.name.split('.').pop();
-        const path = `${campaignId}/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from('testimonial-videos').upload(path, videoFile);
-        if (uploadError) throw uploadError;
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from('testimonial-videos').getPublicUrl(path);
-        video_url = publicUrl;
+      const res = await fetch(`/api/collect/${campaignId}`, { method: 'POST', body });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to submit testimonial');
       }
-
-      const nameBlock = schema.find((b) => b.type === 'text' && b.label.toLowerCase().includes('name'));
-      const textBlock = schema.find((b) => b.type === 'textarea');
-      const ratingBlock = schema.find((b) => b.type === 'rating');
-      const titleBlock = schema.find((b) => b.type === 'text' && !b.label.toLowerCase().includes('name'));
-
-      const { data: testimonial, error: insertError } = await supabase
-        .from('testimonials')
-        .insert({
-          campaign_id: campaignId,
-          customer_name: formValues[nameBlock?.id ?? ''] ?? '',
-          customer_title: formValues[titleBlock?.id ?? ''] ?? '',
-          content_type: videoFile ? 'video' : 'text',
-          text_content: formValues[textBlock?.id ?? ''] || null,
-          video_url,
-          rating: formValues[ratingBlock?.id ?? ''] ?? 5,
-          form_data: formValues,
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      const textContent = formValues[textBlock?.id ?? ''];
-      if (textContent) {
-        await fetch('/api/testimonials/summarize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: testimonial.id, text: textContent }),
-        });
-      }
-
-      await fetch('/api/emails/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testimonialId: testimonial.id }),
-      });
 
       setStep('done');
     } catch (err: any) {
@@ -245,18 +245,21 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
                       )}
 
                       {block.type === 'rating' && (
-                        <div className="flex gap-1">
-                          {Array.from({ length: parseInt(block.options?.[0] ?? '5') }, (_, i) => i + 1).map((star) => (
-                            <motion.button key={star} type="button" whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => set(block.id, star)}>
-                              <Star
-                                size={24}
-                                fill={star <= (formValues[block.id] ?? 0) ? brandColor : 'none'}
-                                stroke={star <= (formValues[block.id] ?? 0) ? brandColor : '#d4d4d8'}
-                                strokeWidth={1.5}
-                              />
-                            </motion.button>
-                          ))}
-                        </div>
+                        <>
+                          <div className="flex gap-1">
+                            {Array.from({ length: parseInt(block.options?.[0] ?? '5') }, (_, i) => i + 1).map((star) => (
+                              <motion.button key={star} type="button" whileHover={{ scale: 1.25 }} whileTap={{ scale: 0.9 }} onClick={() => set(block.id, star)}>
+                                <Star
+                                  size={24}
+                                  fill={star <= (formValues[block.id] ?? 0) ? brandColor : 'none'}
+                                  stroke={star <= (formValues[block.id] ?? 0) ? brandColor : '#d4d4d8'}
+                                  strokeWidth={1.5}
+                                />
+                              </motion.button>
+                            ))}
+                          </div>
+                          {fieldErrors[block.id] && <p className="text-xs text-red-500 mt-1">{fieldErrors[block.id]}</p>}
+                        </>
                       )}
 
                       {block.type === 'nps' && (
@@ -284,55 +287,65 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
                             <span className="text-xs text-zinc-400">{block.options?.[0] ?? 'Not likely'}</span>
                             <span className="text-xs text-zinc-400">{block.options?.[1] ?? 'Very likely'}</span>
                           </div>
+                          {fieldErrors[block.id] && <p className="text-xs text-red-500 mt-1">{fieldErrors[block.id]}</p>}
                         </div>
                       )}
 
                       {block.type === 'select' && (
-                        <div className="space-y-2">
-                          {(block.options?.filter((o) => !o.startsWith('help:')) ?? []).map((opt, i) => {
-                            const isMulti = block.placeholder === 'multi';
-                            const selected = isMulti ? (formValues[block.id] ?? []).includes(opt) : formValues[block.id] === opt;
-                            return (
-                              <motion.div
-                                key={i}
-                                whileHover={{ x: 2 }}
-                                onClick={() => {
-                                  if (isMulti) {
-                                    const cur: string[] = formValues[block.id] ?? [];
-                                    set(block.id, cur.includes(opt) ? cur.filter((o) => o !== opt) : [...cur, opt]);
-                                  } else {
-                                    set(block.id, opt);
-                                  }
-                                }}
-                                className="flex items-center gap-2.5 cursor-pointer"
-                              >
-                                <div
-                                  className={`w-4 h-4 ${isMulti ? 'rounded' : 'rounded-full'} border-2 shrink-0 flex items-center justify-center transition-all`}
-                                  style={{ borderColor: selected ? brandColor : '#d4d4d8', backgroundColor: selected ? brandColor : 'white' }}
+                        <>
+                          <div className="space-y-2">
+                            {(block.options?.filter((o) => !o.startsWith('help:')) ?? []).map((opt, i) => {
+                              const isMulti = block.placeholder === 'multi';
+                              const selected = isMulti ? (formValues[block.id] ?? []).includes(opt) : formValues[block.id] === opt;
+                              return (
+                                <motion.div
+                                  key={i}
+                                  whileHover={{ x: 2 }}
+                                  onClick={() => {
+                                    if (isMulti) {
+                                      const cur: string[] = formValues[block.id] ?? [];
+                                      set(block.id, cur.includes(opt) ? cur.filter((o) => o !== opt) : [...cur, opt]);
+                                    } else {
+                                      set(block.id, opt);
+                                    }
+                                  }}
+                                  className="flex items-center gap-2.5 cursor-pointer"
                                 >
-                                  {selected && <div className={`${isMulti ? 'w-1.5 h-1.5 rounded-sm' : 'w-1.5 h-1.5 rounded-full'} bg-white`} />}
-                                </div>
-                                <span className="text-sm text-zinc-600">{opt}</span>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
+                                  <div
+                                    className={`w-4 h-4 ${isMulti ? 'rounded' : 'rounded-full'} border-2 shrink-0 flex items-center justify-center transition-all`}
+                                    style={{ borderColor: selected ? brandColor : '#d4d4d8', backgroundColor: selected ? brandColor : 'white' }}
+                                  >
+                                    {selected && <div className={`${isMulti ? 'w-1.5 h-1.5 rounded-sm' : 'w-1.5 h-1.5 rounded-full'} bg-white`} />}
+                                  </div>
+                                  <span className="text-sm text-zinc-600">{opt}</span>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                          {fieldErrors[block.id] && <p className="text-xs text-red-500 mt-1">{fieldErrors[block.id]}</p>}
+                        </>
                       )}
 
                       {block.type === 'consent' && (
-                        <div onClick={() => set(block.id, !formValues[block.id])} className="flex items-start gap-2.5 cursor-pointer">
-                          <div
-                            className="w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all"
-                            style={{ borderColor: formValues[block.id] ? brandColor : '#d4d4d8', backgroundColor: formValues[block.id] ? brandColor : 'white' }}
-                          >
-                            {formValues[block.id] && (
-                              <span className="text-white" style={{ fontSize: 9 }}>
-                                ✓
-                              </span>
-                            )}
+                        <>
+                          <div onClick={() => set(block.id, !formValues[block.id])} className="flex items-start gap-2.5 cursor-pointer">
+                            <div
+                              className="w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all"
+                              style={{
+                                borderColor: fieldErrors[block.id] ? '#ef4444' : formValues[block.id] ? brandColor : '#d4d4d8',
+                                backgroundColor: formValues[block.id] ? brandColor : 'white',
+                              }}
+                            >
+                              {formValues[block.id] && (
+                                <span className="text-white" style={{ fontSize: 9 }}>
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-sm text-zinc-600 leading-snug">{block.placeholder ?? 'I agree to have my testimonial published publicly'}</span>
                           </div>
-                          <span className="text-sm text-zinc-600 leading-snug">{block.placeholder ?? 'I agree to have my testimonial published publicly'}</span>
-                        </div>
+                          {fieldErrors[block.id] && <p className="text-xs text-red-500 mt-1">{fieldErrors[block.id]}</p>}
+                        </>
                       )}
 
                       {block.type === 'image' && (
