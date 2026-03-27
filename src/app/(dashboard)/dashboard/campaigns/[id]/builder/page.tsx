@@ -10,7 +10,7 @@ import { SortableBlock } from '@/components/FormBuilder/SortableBlock';
 import { FormPreview } from '@/components/FormBuilder/FormPreview';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { Check, Eye, EyeOff, Type, AlignLeft, Mail, Link as LinkIcon, Hash, Calendar, Star, BarChart2, List, CheckSquare, Image, Minus, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Check, Eye, EyeOff, Type, AlignLeft, Mail, Link as LinkIcon, Hash, Calendar, Star, BarChart2, List, CheckSquare, Image, Minus, RotateCcw, ArrowLeft, ChevronDown } from 'lucide-react';
 import { AnimatedDotGrid } from '@/components/AnimatedDotGrid';
 
 const BLOCK_ICONS: Record<BlockType, React.ReactNode> = {
@@ -56,6 +56,7 @@ export default function BuilderPage({ params }: { params: Promise<{ id: string }
   const [saved, setSaved] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [previewOnly, setPreviewOnly] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -186,29 +187,52 @@ export default function BuilderPage({ params }: { params: Promise<{ id: string }
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className="max-w border-r border-zinc-200 bg-white flex flex-col overflow-hidden shrink-0"
             >
-              {/* Block palette — fixed height, scrollable */}
-              <div className="h-65 shrink-0 overflow-y-auto px-4 pt-4 pb-3 border-b border-zinc-100 space-y-3">
-                {BLOCK_GROUPS.map((group) => (
-                  <div key={group.key}>
-                    <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{group.label}</p>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {group.types.map((type) => (
-                        <motion.button
-                          key={type}
-                          onClick={() => addBlock(type)}
-                          whileHover={{ scale: 1.03, y: -1 }}
-                          whileTap={{ scale: 0.96 }}
-                          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition-all text-left"
-                        >
-                          <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: BLOCK_COLORS[type] + '15', color: BLOCK_COLORS[type] }}>
-                            {BLOCK_ICONS[type]}
+              {/* Block palette — collapsible */}
+              <div className="shrink-0 border-b border-zinc-100">
+                <button
+                  onClick={() => setPaletteOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-zinc-500 uppercase tracking-wider hover:bg-zinc-50 transition-colors"
+                >
+                  Add blocks
+                  <motion.div animate={{ rotate: paletteOpen ? 0 : -180 }} transition={{ duration: 0.15 }}>
+                    <ChevronDown size={15} />
+                  </motion.div>
+                </button>
+                <AnimatePresence initial={false}>
+                  {paletteOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-4 py-3 space-y-3">
+                        {BLOCK_GROUPS.map((group) => (
+                          <div key={group.key}>
+                            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{group.label}</p>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {group.types.map((type) => (
+                                <motion.button
+                                  key={type}
+                                  onClick={() => addBlock(type)}
+                                  whileHover={{ scale: 1.03, y: -1 }}
+                                  whileTap={{ scale: 0.96 }}
+                                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50 transition-all text-left"
+                                >
+                                  <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: BLOCK_COLORS[type] + '15', color: BLOCK_COLORS[type] }}>
+                                    {BLOCK_ICONS[type]}
+                                  </div>
+                                  <span className="text-xs text-zinc-600 font-medium leading-tight truncate">{BLOCK_META[type].label}</span>
+                                </motion.button>
+                              ))}
+                            </div>
                           </div>
-                          <span className="text-xs text-zinc-600 font-medium leading-tight truncate">{BLOCK_META[type].label}</span>
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Blocks list */}
