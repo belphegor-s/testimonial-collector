@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { STATIC_ASSETS_BUCKET_NAME } from '@/data/constants';
 import CampaignForm from '@/components/CampaignForm';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 export default function CampaignSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = createClient();
@@ -80,18 +82,26 @@ export default function CampaignSettingsPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <CampaignForm
-      mode="edit"
-      loading={loading}
-      saving={saving}
-      error={error}
-      initialValues={{
-        name: data?.name,
-        brandColor: data?.brand_color,
-        thankYouMessage: data?.thank_you_message,
-        logoUrl: data?.logo_url,
-      }}
-      onSubmit={handleSave}
-    />
+    <div>
+      <Link
+        href={`/dashboard/campaigns/${campaignId}`}
+        className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors shrink-0 flex items-center gap-2 mb-4"
+      >
+        <ArrowLeft size={14} /> Back
+      </Link>
+      <CampaignForm
+        mode="edit"
+        loading={loading}
+        saving={saving}
+        error={error}
+        initialValues={{
+          name: data?.name,
+          brandColor: data?.brand_color,
+          thankYouMessage: data?.thank_you_message,
+          logoUrl: data?.logo_url,
+        }}
+        onSubmit={handleSave}
+      />
+    </div>
   );
 }

@@ -3,6 +3,11 @@ import { resend } from '@/lib/resend';
 import { FROM_EMAIL } from '@/app/api/emails/notify/route';
 import Anthropic from '@anthropic-ai/sdk';
 import { FormBlock } from '@/types/form';
+import { escapeHtml } from '@/lib/utils';
+
+const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'avi'];
+const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 
 const anthropic = new Anthropic();
 
@@ -39,19 +44,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
   }
 
   const formData = await req.formData();
-  const formValues = JSON.parse(formData.get('formValues') as string);
-  const schema: FormBlock[] = JSON.parse(formData.get('schema') as string);
+
+  let formValues: Record<string, any>;
+  let schema: FormBlock[];
+  try {
+    formValues = JSON.parse(formData.get('formValues') as string);
+    schema = JSON.parse(formData.get('schema') as string);
+  } catch {
+    return Response.json({ error: 'Invalid form data' }, { status: 400 });
+  }
+
   const videoFile = formData.get('video') as File | null;
 
   let video_url = null;
 
   // Handle video upload
   if (videoFile && videoFile.size > 0) {
-    const ext = videoFile.name.split('.').pop();
+    if (videoFile.size > MAX_VIDEO_SIZE) {
+      return Response.json({ error: 'File too large. Maximum size is 50MB.' }, { status: 400 });
+    }
+    const ext = (videoFile.name.split('.').pop() || '').toLowerCase();
+    if (!ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
+      return Response.json({ error: 'Invalid file type. Allowed: mp4, mov, webm, avi.' }, { status: 400 });
+    }
+    if (videoFile.type && !ALLOWED_VIDEO_MIMES.includes(videoFile.type)) {
+      return Response.json({ error: 'Invalid video MIME type.' }, { status: 400 });
+    }
     const path = `${campaignId}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await videoFile.arrayBuffer());
     const { error: uploadError } = await supabase.storage.from('testimonial-videos').upload(path, buffer, {
-      contentType: videoFile.type,
+      contentType: videoFile.type || 'video/mp4',
     });
     if (uploadError) {
       return Response.json({ error: 'Video upload failed' }, { status: 500 });
@@ -119,14 +141,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
       await resend.emails.send({
         from: FROM_EMAIL,
         to: user.email,
-        subject: `New testimonial from ${testimonial.customer_name}`,
+        subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;">
             <h1 style="font-size:18px;font-weight:600;color:#18181b;margin:0 0 4px;">New testimonial received</h1>
-            <p style="font-size:13px;color:#a1a1aa;margin:0 0 24px;">Campaign: ${campaign.name}</p>
+            <p style="font-size:13px;color:#a1a1aa;margin:0 0 24px;">Campaign: ${escapeHtml(campaign.name)}</p>
             <div style="background:#f4f4f5;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
-              <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 4px;">${testimonial.customer_name}${testimonial.customer_title ? ` · ${testimonial.customer_title}` : ''}</p>
-              <p style="font-size:14px;color:#52525b;line-height:1.6;margin:8px 0 0;">${textContent || '[Video testimonial]'}</p>
+              <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 4px;">${escapeHtml(testimonial.customer_name)}${testimonial.customer_title ? ` · ${escapeHtml(testimonial.customer_title)}` : ''}</p>
+              <p style="font-size:14px;color:#52525b;line-height:1.6;margin:8px 0 0;">${escapeHtml(textContent || '[Video testimonial]')}</p>
             </div>
             <a href="${dashboardUrl}" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;">
               Review in dashboard →

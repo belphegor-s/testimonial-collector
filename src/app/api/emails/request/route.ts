@@ -1,6 +1,7 @@
 import { resend } from '@/lib/resend';
 import { createClient } from '@/lib/supabase/server';
 import { FROM_EMAIL } from '../notify/route';
+import { escapeHtml } from '@/lib/utils';
 
 export async function POST(req: Request) {
   const { campaignId, customerEmail, customerName } = await req.json();
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
         <div style="width:40px;height:40px;border-radius:10px;background:${campaign.brand_color}22;display:flex;align-items:center;justify-content:center;margin-bottom:24px;">
           <div style="width:16px;height:16px;border-radius:50%;background:${campaign.brand_color};"></div>
         </div>
-        <h1 style="font-size:20px;font-weight:600;color:#18181b;margin:0 0 8px;">Hi${customerName ? ` ${customerName}` : ''},</h1>
+        <h1 style="font-size:20px;font-weight:600;color:#18181b;margin:0 0 8px;">Hi${customerName ? ` ${escapeHtml(customerName)}` : ''},</h1>
         <p style="font-size:15px;color:#52525b;line-height:1.6;margin:0 0 24px;">We'd love to hear about your experience. It only takes a minute and helps us a lot.</p>
         <a href="${collectionUrl}" style="display:inline-block;background:${campaign.brand_color};color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;">
           Share your experience →

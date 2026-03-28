@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FormBlock, DEFAULT_SCHEMA } from '@/types/form';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Star } from 'lucide-react';
+import { Star, Upload } from 'lucide-react';
 import Image from 'next/image';
+import VideoRecorder from '@/components/VideoRecorder';
 
 export default function CollectPage({ params }: { params: Promise<{ campaignId: string }> }) {
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -16,7 +17,6 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     params.then(async ({ campaignId: id }) => {
@@ -363,23 +363,12 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
               ))}
             </AnimatePresence>
 
-            {/* Video upload — always at bottom */}
+            {/* Video testimonial — record or upload */}
             <div>
               <label className="block text-xs font-medium text-zinc-600 mb-1.5">
                 Video testimonial <span className="text-zinc-400 font-normal">(optional)</span>
               </label>
-              <div onClick={() => fileRef.current?.click()} className="border-2 border-dashed border-zinc-200 rounded-xl p-5 text-center cursor-pointer hover:border-zinc-300 transition-colors">
-                {videoFile ? (
-                  <p className="text-sm text-zinc-700 font-medium">{videoFile.name}</p>
-                ) : (
-                  <>
-                    <Upload size={16} className="mx-auto text-zinc-300 mb-1.5" />
-                    <p className="text-sm text-zinc-500">Click to upload a video</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">MP4, MOV up to 50MB</p>
-                  </>
-                )}
-              </div>
-              <input ref={fileRef} type="file" accept="video/mp4,video/quicktime" className="hidden" onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)} />
+              <VideoRecorder brandColor={brandColor} onVideoReady={setVideoFile} currentFile={videoFile} />
             </div>
 
             {error && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
