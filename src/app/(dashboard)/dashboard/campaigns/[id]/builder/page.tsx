@@ -11,7 +11,7 @@ import { FormPreview } from '@/components/FormBuilder/FormPreview';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { Check, Eye, EyeOff, Type, AlignLeft, Mail, Link as LinkIcon, Hash, Calendar, Star, BarChart2, List, CheckSquare, Image, Minus, RotateCcw, ArrowLeft, ChevronDown } from 'lucide-react';
-import { AnimatedDotGrid } from '@/components/AnimatedDotGrid';
+import { DotGrid } from '@/components/DotGrid';
 
 const BLOCK_ICONS: Record<BlockType, React.ReactNode> = {
   text: <Type size={13} />,
@@ -288,7 +288,7 @@ export default function BuilderPage({ params }: { params: Promise<{ id: string }
 
         {/* Preview panel */}
         <div className="flex-1 overflow-y-auto min-h-0 px-6 py-8 relative">
-          <AnimatedDotGrid />
+          <DotGrid />
           <div className="max-w-sm mx-auto">
             <FormPreview blocks={blocks} brandColor={campaign.brand_color} />
           </div>

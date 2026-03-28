@@ -90,15 +90,6 @@ export async function GET(req: Request) {
 
     const rows = (data || []) as Testimonial[];
 
-    console.log(
-      'RAW_ROWS_VIDEO:',
-      rows.map((r) => ({
-        id: r.id,
-        type: r.content_type,
-        video_url: r.video_url,
-      })),
-    );
-
     const videoPaths: string[] = [];
     for (const r of rows) {
       if (r.content_type === 'video' && typeof r.video_url === 'string') {
