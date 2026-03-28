@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <nav className="bg-white border-b border-zinc-200 px-6 py-3 flex items-center justify-between">
+      <nav className="bg-white border-b border-zinc-200 px-6 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center">
