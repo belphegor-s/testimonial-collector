@@ -55,21 +55,21 @@ export default async function CampaignPage({ params }: { params: { id: string } 
         <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-2">
           <ArrowLeft size={14} /> Back
         </Link>
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 mt-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: campaign.brand_color + '22' }}>
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: campaign.brand_color }} />
             </div>
             <h1 className="text-lg font-semibold text-zinc-900">{campaign.name}</h1>
             <Link
               href={`/dashboard/campaigns/${campaign.id}/builder`}
-              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
+              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-2.5 sm:py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
             >
               Edit form
             </Link>
             <Link
               href={`/dashboard/campaigns/${campaign.id}/settings`}
-              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
+              className="text-sm text-zinc-500 border border-zinc-200 px-3 py-2.5 sm:py-1.5 rounded-lg hover:border-zinc-300 hover:text-zinc-700 transition-colors"
             >
               Settings
             </Link>

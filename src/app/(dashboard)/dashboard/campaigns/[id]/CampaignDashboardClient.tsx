@@ -494,7 +494,7 @@ new ResizeObserver(function(){
   return (
     <div>
       {/* ── Stats ─────────────────────────────────────── */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Total', value: stats.total, icon: MessageSquare, color: '#6366f1' },
           { label: 'Approved', value: stats.approved, icon: Check, color: '#10b981' },
@@ -523,51 +523,53 @@ new ResizeObserver(function(){
               setTab(t.key);
               if (t.key === 'analytics') loadSentiment();
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            className={`flex flex-1 items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
           >
             <t.icon size={15} />
-            {t.label}
+            <span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
       </div>
 
       {/* ── Filter & search bar ───────────────────────── */}
       {(tab === 'overview' || tab === 'table') && (
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex items-center gap-0.5 bg-white border border-zinc-200 rounded-lg p-0.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-4">
+          <div className="flex items-center gap-0.5 bg-white border border-zinc-200 rounded-lg p-0.5 overflow-x-auto shrink-0">
             {(['all', 'approved', 'pending', 'video', 'text'] as ViewFilter[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize ${filter === f ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize whitespace-nowrap ${filter === f ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'}`}
               >
                 {f}
               </button>
             ))}
           </div>
-          <div className="flex-1 relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search testimonials..."
-              value={searchInput}
-              onChange={(e) => handleSearchInput(e.target.value)}
-              className="w-full text-sm border border-zinc-200 rounded-lg pl-9 pr-9 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200 transition-all"
-            />
-            {searchInput && (
-              <button
-                onClick={() => {
-                  handleSearchInput('');
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            <span>{total} results</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex-1 relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search testimonials..."
+                value={searchInput}
+                onChange={(e) => handleSearchInput(e.target.value)}
+                className="w-full text-sm border border-zinc-200 rounded-lg pl-9 pr-9 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-200 transition-all"
+              />
+              {searchInput && (
+                <button
+                  onClick={() => {
+                    handleSearchInput('');
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500 transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-zinc-400 shrink-0">
+              {loading && <Loader2 size={14} className="animate-spin" />}
+              <span>{total} results</span>
+            </div>
           </div>
         </div>
       )}
@@ -752,7 +754,7 @@ new ResizeObserver(function(){
       {tab === 'analytics' && (
         <div className="space-y-6">
           {/* Charts row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Rating distribution */}
             <div className="bg-white border border-zinc-200 rounded-xl p-5 col-span-2">
               <h3 className="text-sm font-semibold text-zinc-800 mb-4 flex items-center gap-2">
@@ -911,7 +913,7 @@ new ResizeObserver(function(){
 
             {sentimentLoaded && aggregate && (
               <div className="space-y-5">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
                     <p className="text-xs font-medium text-purple-600 uppercase tracking-wide mb-1">Overall Sentiment</p>
                     <p className="text-lg font-bold text-purple-800 capitalize">{aggregate.overall_sentiment}</p>

@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-lg font-semibold text-zinc-900">Campaigns</h1>
           <p className="text-sm text-zinc-400 mt-0.5">Each campaign has its own collection link</p>

@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <nav className="bg-white border-b border-zinc-200 px-6 py-3 flex items-center justify-between sticky top-0 z-30">
+      <nav className="bg-white border-b border-zinc-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center">
@@ -26,11 +26,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </Link>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-400">{user.email}</span>
+          <span className="hidden sm:inline text-xs text-zinc-400">{user.email}</span>
           <LogoutButton />
         </div>
       </nav>
-      <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</main>
     </div>
   );
 }
