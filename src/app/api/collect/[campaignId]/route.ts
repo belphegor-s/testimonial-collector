@@ -15,11 +15,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ campaignId
   const { campaignId } = await params;
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from('campaigns')
-    .select('id, name, brand_color, logo_url, thank_you_message, form_schema')
-    .eq('id', campaignId)
-    .single();
+  const { data, error } = await supabase.from('campaigns').select('id, name, brand_color, logo_url, thank_you_message, form_schema').eq('id', campaignId).single();
 
   if (error || !data) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
@@ -33,11 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
   const supabase = createAdminClient();
 
   // Verify campaign exists and get owner_id
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('id, name, owner_id')
-    .eq('id', campaignId)
-    .single();
+  const { data: campaign } = await supabase.from('campaigns').select('id, name, owner_id').eq('id', campaignId).single();
 
   if (!campaign) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
@@ -78,10 +70,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
     if (uploadError) {
       return Response.json({ error: 'Video upload failed' }, { status: 500 });
     }
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('testimonial-videos').getPublicUrl(path);
-    video_url = publicUrl;
+    video_url = path;
   }
 
   // Extract fields from schema
