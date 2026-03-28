@@ -24,6 +24,42 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  };
+
+  const playBeep = (type: 'tick' | 'start') => {
+    const ctx = getAudioCtx();
+
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    // 🎯 Different tones
+    if (type === 'tick') {
+      oscillator.frequency.value = 1000; // sharp tick
+      gainNode.gain.value = 0.2;
+    } else {
+      oscillator.frequency.value = 600; // deeper start tone
+      gainNode.gain.value = 0.3;
+    }
+
+    oscillator.type = 'square'; // classic digital beep
+
+    oscillator.start();
+
+    // duration control
+    const duration = type === 'tick' ? 0.08 : 0.18;
+
+    oscillator.stop(ctx.currentTime + duration);
+  };
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -47,25 +83,44 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
         audio: true,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
+
       setMode('preview');
     } catch {
       alert('Could not access camera. Please check permissions.');
     }
   };
 
+  useEffect(() => {
+    if ((mode === 'preview' || mode === 'countdown' || mode === 'recording') && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.srcObject = streamRef.current;
+
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch(() => {});
+      };
+    }
+  }, [mode]);
+
   const startCountdown = () => {
     setCountdown(3);
     setMode('countdown');
+
     let count = 3;
+
+    playBeep('tick'); // 3
+
     const interval = setInterval(() => {
       count--;
+
+      if (count > 0) {
+        playBeep('tick');
+      }
+
       setCountdown(count);
+
       if (count === 0) {
         clearInterval(interval);
+        playBeep('start');
         startRecording();
       }
     }, 1000);
@@ -74,7 +129,9 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
   const startRecording = () => {
     if (!streamRef.current) return;
     chunksRef.current = [];
-    const mr = new MediaRecorder(streamRef.current, { mimeType: 'video/webm;codecs=vp9,opus' });
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+
+    const mr = new MediaRecorder(streamRef.current, { mimeType });
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
@@ -153,9 +210,7 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-zinc-800 truncate">{currentFile?.name || 'Recorded video'}</p>
-            <p className="text-xs text-zinc-400">
-              {currentFile ? `${(currentFile.size / (1024 * 1024)).toFixed(1)} MB` : formatTime(duration)}
-            </p>
+            <p className="text-xs text-zinc-400">{currentFile ? `${(currentFile.size / (1024 * 1024)).toFixed(1)} MB` : formatTime(duration)}</p>
           </div>
           <button type="button" onClick={reset} className="p-1.5 rounded-lg hover:bg-zinc-100 transition-colors">
             <X size={16} className="text-zinc-400" />
@@ -171,15 +226,8 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
         {mode === 'idle' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
             {/* Record option */}
-            <button
-              type="button"
-              onClick={startCamera}
-              className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-zinc-200 hover:border-zinc-300 transition-all group"
-            >
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
-                style={{ backgroundColor: brandColor + '10' }}
-              >
+            <button type="button" onClick={startCamera} className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-zinc-200 hover:border-zinc-300 transition-all group">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors" style={{ backgroundColor: brandColor + '10' }}>
                 <Camera size={18} style={{ color: brandColor }} />
               </div>
               <div className="text-left">
@@ -202,30 +250,18 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
                 <p className="text-xs text-zinc-400">MP4, MOV, WebM up to 50MB</p>
               </div>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
+            <input ref={fileInputRef} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={handleFileSelect} />
           </motion.div>
         )}
 
         {(mode === 'preview' || mode === 'countdown' || mode === 'recording') && (
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="relative rounded-xl overflow-hidden bg-black">
-            <video ref={videoRef} muted playsInline className="w-full aspect-video object-cover mirror" style={{ transform: 'scaleX(-1)' }} />
+            <video ref={videoRef} muted playsInline autoPlay className="w-full aspect-video object-cover" style={{ transform: 'scaleX(-1)' }} />
 
             {/* Countdown overlay */}
             {mode === 'countdown' && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <motion.div
-                  key={countdown}
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 1.5, opacity: 0 }}
-                  className="text-6xl font-bold text-white"
-                >
+                <motion.div key={countdown} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.5, opacity: 0 }} className="text-6xl font-bold text-white">
                   {countdown}
                 </motion.div>
               </div>
@@ -243,29 +279,16 @@ export default function VideoRecorder({ brandColor, onVideoReady, currentFile }:
             <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3">
               {mode === 'preview' && (
                 <>
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
-                  >
+                  <button type="button" onClick={reset} className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
                     <X size={18} className="text-white" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={startCountdown}
-                    className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
-                    style={{ backgroundColor: brandColor }}
-                  >
+                  <button type="button" onClick={startCountdown} className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg" style={{ backgroundColor: brandColor }}>
                     <Circle size={24} className="text-white" fill="white" />
                   </button>
                 </>
               )}
               {mode === 'recording' && (
-                <button
-                  type="button"
-                  onClick={stopRecording}
-                  className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
-                >
+                <button type="button" onClick={stopRecording} className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors">
                   <Square size={20} className="text-white" fill="white" />
                 </button>
               )}
