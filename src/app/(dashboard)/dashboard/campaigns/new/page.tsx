@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
 import CampaignForm from '@/components/CampaignForm';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -43,5 +45,12 @@ export default function NewCampaignPage() {
     }
   }
 
-  return <CampaignForm mode="create" saving={loading} error={error} onSubmit={handleCreate} />;
+  return (
+    <div>
+      <Link href={`/dashboard`} className="text-sm text-zinc-400 hover:text-zinc-700 transition-colors shrink-0 flex items-center gap-2 mb-4">
+        <ArrowLeft size={14} /> Back
+      </Link>
+      <CampaignForm mode="create" saving={loading} error={error} onSubmit={handleCreate} />
+    </div>
+  );
 }
