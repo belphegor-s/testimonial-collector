@@ -3,12 +3,14 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { escapeHtml } from '@/lib/utils';
 
-export const FROM_EMAIL = process.env.FROM_EMAIL || 'Testimonial Collector <noreply@example.com>';
+export const FROM_EMAIL = process.env.FROM_EMAIL as string;
 
 export async function POST(req: Request) {
   // Auth check
   const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { testimonialId } = await req.json();
