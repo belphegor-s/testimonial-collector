@@ -907,14 +907,14 @@ new ResizeObserver(function(){
             {sentimentLoading && !sentimentLoaded && (
               <div className="flex items-center justify-center py-12 gap-3">
                 <Loader2 size={18} className="animate-spin text-purple-500" />
-                <span className="text-sm text-zinc-500">Claude is analyzing your testimonials...</span>
+                <span className="text-sm text-zinc-500">AI is analyzing your testimonials...</span>
               </div>
             )}
 
             {sentimentLoaded && aggregate && (
               <div className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+                  <div className="bg-linear-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
                     <p className="text-xs font-medium text-purple-600 uppercase tracking-wide mb-1">Overall Sentiment</p>
                     <p className="text-lg font-bold text-purple-800 capitalize">{aggregate.overall_sentiment}</p>
                     <div className="flex items-center gap-1.5 mt-1">
@@ -924,7 +924,7 @@ new ResizeObserver(function(){
                       <span className="text-xs font-medium text-purple-600">{(aggregate.avg_score * 100).toFixed(0)}%</span>
                     </div>
                   </div>
-                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
+                  <div className="bg-linear-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
                     <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide mb-1">Top Praise</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {aggregate.top_praise.map((p, i) => (
@@ -934,7 +934,7 @@ new ResizeObserver(function(){
                       ))}
                     </div>
                   </div>
-                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
+                  <div className="bg-linear-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
                     <p className="text-xs font-medium text-amber-600 uppercase tracking-wide mb-1">Concerns</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {aggregate.top_concerns.length > 0 ? (

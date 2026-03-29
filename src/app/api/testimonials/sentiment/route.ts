@@ -7,18 +7,15 @@ const anthropic = new Anthropic();
 export async function POST(req: Request) {
   // Auth check
   const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { campaignId, force } = await req.json();
 
   // Verify campaign ownership
-  const { data: campaign } = await authClient
-    .from('campaigns')
-    .select('id')
-    .eq('id', campaignId)
-    .eq('owner_id', user.id)
-    .single();
+  const { data: campaign } = await authClient.from('campaigns').select('id').eq('id', campaignId).eq('owner_id', user.id).single();
   if (!campaign) return Response.json({ error: 'Not found' }, { status: 404 });
 
   const supabase = createAdminClient();
@@ -68,7 +65,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Fresh analysis — call Claude
+  // Fresh analysis
   const analysisSlice = textTestimonials.slice(0, 30);
   const textsForAnalysis = analysisSlice.map((t, i) => `[${i}] (by ${t.customer_name}, rating: ${t.rating}/5): "${t.text_content}"`).join('\n\n');
 
