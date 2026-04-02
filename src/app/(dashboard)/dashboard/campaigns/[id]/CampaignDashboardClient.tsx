@@ -405,14 +405,11 @@ new ResizeObserver(function(){
   }, [campaign.id, page, pageSize, filter, sortField, sortDir, searchQuery]);
 
   // Fetch when params change (skip initial load since server provides it)
-  const isInitialMount = useRef(true);
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
+    if (!campaign?.id) return;
+
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, campaign?.id]);
 
   // Auto-load cached sentiment when analytics tab is active (e.g. on page refresh with ?tab=analytics)
   useEffect(() => {

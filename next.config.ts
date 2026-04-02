@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [new URL('https://urizlqjfhsekknbzzric.supabase.co/storage/**')],
   },
+  reactStrictMode: false,
 };
 
 export default nextConfig;
