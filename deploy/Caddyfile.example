@@ -1,0 +1,29 @@
+{
+	# Global options — on-demand TLS for customer custom domains
+	on_demand_tls {
+		ask https://kudoso.io/api/domains/caddy-ask
+		# Optional: add a small per-host rate limit if needed
+		# burst 10
+	}
+	email hello@kudoso.io
+}
+
+# Root site + any *.kudoso.io subdomain — uses standard ACME
+kudoso.io, www.kudoso.io, *.kudoso.io {
+	encode gzip zstd
+	reverse_proxy app:3000
+}
+
+# Customer-supplied custom domains (CNAME → proxy.kudoso.io or A → server IP)
+# Caddy will call the on_demand_tls.ask endpoint above before issuing a cert.
+:443 {
+	tls {
+		on_demand
+	}
+	reverse_proxy app:3000
+}
+
+# Plain HTTP — redirect to HTTPS so Caddy can do the on-demand provisioning over 80→443 ACME
+:80 {
+	redir https://{host}{uri}
+}

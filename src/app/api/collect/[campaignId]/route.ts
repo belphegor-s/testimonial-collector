@@ -4,6 +4,7 @@ import { FROM_EMAIL } from '@/app/api/emails/notify/route';
 import Anthropic from '@anthropic-ai/sdk';
 import { FormBlock } from '@/types/form';
 import { escapeHtml } from '@/lib/utils';
+import { assertCanAcceptTestimonial } from '@/lib/plan';
 
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'avi'];
 const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
@@ -33,6 +34,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
 
   if (!campaign) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
+  }
+
+  // Plan gate: free-tier owners cap at 10 testimonials per campaign
+  const gate = await assertCanAcceptTestimonial(campaignId);
+  if (!gate.ok) {
+    return Response.json({ error: gate.reason ?? 'Submissions are paused for this campaign.' }, { status: 403 });
   }
 
   const formData = await req.formData();
