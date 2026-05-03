@@ -81,7 +81,7 @@ export default function Sidebar({ userEmail, plan = 'free', children }: { userEm
           )}
         >
           {!collapsed && (
-            <Link href="/dashboard" className="flex items-center gap-2 min-w-0 px-2">
+            <Link href="/" className="flex items-center gap-2 min-w-0 px-2">
               <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center shrink-0">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
               </div>
@@ -128,7 +128,7 @@ export default function Sidebar({ userEmail, plan = 'free', children }: { userEm
       </aside>
 
       <div className="md:hidden sticky top-0 z-30 flex items-center justify-between bg-white border-b border-zinc-200 px-4 h-12">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
           </div>

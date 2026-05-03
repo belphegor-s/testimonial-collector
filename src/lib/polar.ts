@@ -77,3 +77,52 @@ export async function ensureProducts(): Promise<ProductIds> {
 export function appUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 }
+
+export type RecentOrder = {
+  id: string;
+  createdAt: Date;
+  totalAmount: number;
+  currency: string;
+  status: string;
+  productName: string;
+  invoiceNumber: string | null;
+};
+
+export async function getRecentOrders(externalCustomerId: string, limit = 10): Promise<RecentOrder[]> {
+  if (!externalCustomerId) return [];
+  try {
+    const iterator = await polar().orders.list({
+      externalCustomerId,
+      limit,
+      sorting: ['-created_at'] as unknown as never,
+    });
+    const orders: RecentOrder[] = [];
+    for await (const page of iterator) {
+      for (const o of page.result.items as Array<{
+        id: string;
+        createdAt: Date;
+        totalAmount: number;
+        currency: string;
+        status: string;
+        invoiceNumber?: string | null;
+        product?: { name: string };
+      }>) {
+        orders.push({
+          id: o.id,
+          createdAt: o.createdAt,
+          totalAmount: o.totalAmount,
+          currency: o.currency,
+          status: o.status,
+          productName: o.product?.name ?? 'Subscription',
+          invoiceNumber: o.invoiceNumber ?? null,
+        });
+        if (orders.length >= limit) return orders;
+      }
+      if (orders.length >= limit) break;
+    }
+    return orders;
+  } catch (err) {
+    console.error('[polar] getRecentOrders failed', err);
+    return [];
+  }
+}

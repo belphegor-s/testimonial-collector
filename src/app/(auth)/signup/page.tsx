@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import GoogleAuthButton from '@/components/GoogleAuthButton';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -45,6 +46,14 @@ export default function SignupPage() {
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">Create account</h1>
           <p className="text-sm text-zinc-400 mt-1">Free for one campaign — upgrade anytime</p>
+        </div>
+
+        <GoogleAuthButton label="Sign up with Google" />
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-zinc-200" />
+          <span className="text-[11px] text-zinc-400 uppercase tracking-wide">or</span>
+          <div className="flex-1 h-px bg-zinc-200" />
         </div>
 
         <form onSubmit={handleSignup} className="flex flex-col gap-4">

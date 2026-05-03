@@ -1,9 +1,11 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { FREE_CAMPAIGN_LIMIT, FREE_TESTIMONIAL_LIMIT, getCampaignCount, getProfile } from '@/lib/plan';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getRecentOrders } from '@/lib/polar';
 import BillingClient from './BillingClient';
-import { Check, Sparkles } from 'lucide-react';
+import { Check, Sparkles, Receipt, ExternalLink } from 'lucide-react';
 
 export const metadata = { title: 'Billing' };
 
@@ -33,6 +35,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     }
   }
 
+  // Recent invoices (Pro only — relies on Polar customer existing)
+  const orders = profile.plan === 'pro' ? await getRecentOrders(user.id, 5) : [];
+
   const sp = await searchParams;
   const justUpgraded = sp.status === 'success';
 
@@ -46,13 +51,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </div>
 
       {justUpgraded && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-          <Sparkles size={16} className="text-emerald-600 shrink-0" />
-          Welcome to Pro. Your subscription is active — enjoy unlimited campaigns + custom domains.
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3 text-sm flex items-start gap-2">
+          <Sparkles size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Welcome to Pro.</p>
+            <p className="text-emerald-700/90 text-xs mt-0.5">
+              It can take a few seconds for your plan to flip — refresh if you don&apos;t see &ldquo;Pro&rdquo; below yet.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Current plan card */}
+      {/* Current plan */}
       <div className="bg-white border border-zinc-200 rounded-xl p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
@@ -61,11 +71,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {profile.plan === 'pro' ? 'Pro' : 'Free'}
             </p>
             {profile.plan === 'pro' && renews && (
-              <p className="text-xs text-zinc-400 mt-1">Renews {renews.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                Renews {renews.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
             )}
-            {profile.plan === 'free' && (
-              <p className="text-xs text-zinc-400 mt-1">$0 / month</p>
-            )}
+            {profile.plan === 'free' && <p className="text-xs text-zinc-400 mt-1">$0 / month</p>}
           </div>
           <span
             className={
@@ -81,21 +91,71 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         {profile.plan === 'free' ? (
           <div className="mt-5 grid gap-3">
             <UsageBar label="Campaigns" current={campaignCount} max={FREE_CAMPAIGN_LIMIT} />
-            {usage.map((u) => (
-              <UsageBar key={u.id} label={`Testimonials · ${u.name}`} current={u.count} max={FREE_TESTIMONIAL_LIMIT} />
-            ))}
+            {usage.length === 0 ? (
+              <p className="text-xs text-zinc-400">Create a campaign to see testimonial usage here.</p>
+            ) : (
+              usage.map((u) => (
+                <UsageBar key={u.id} label={`Testimonials · ${u.name}`} current={u.count} max={FREE_TESTIMONIAL_LIMIT} />
+              ))
+            )}
           </div>
         ) : null}
       </div>
 
       {/* Action card */}
-      {profile.plan === 'free' ? (
-        <UpgradeCard />
-      ) : (
-        <ManageCard />
+      <div className="bg-white border border-zinc-200 rounded-xl p-5">
+        <BillingClient mode={profile.plan === 'pro' ? 'manage' : 'upgrade'} />
+      </div>
+
+      {/* Invoices (Pro) */}
+      {profile.plan === 'pro' && (
+        <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Receipt size={14} className="text-zinc-500" />
+              <h2 className="text-sm font-semibold text-zinc-900">Recent invoices</h2>
+            </div>
+            <span className="text-xs text-zinc-400">Last {orders.length || '—'}</span>
+          </div>
+          {orders.length === 0 ? (
+            <div className="px-5 py-6 text-sm text-zinc-500">
+              No invoices yet. Your first one will appear here after your first charge.
+            </div>
+          ) : (
+            <div className="divide-y divide-zinc-100">
+              {orders.map((o) => (
+                <div key={o.id} className="px-5 py-3 flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-zinc-900 font-medium truncate">{o.productName}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {o.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {o.invoiceNumber ? ` · ${o.invoiceNumber}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-zinc-700 font-medium">{formatMoney(o.totalAmount, o.currency)}</span>
+                    <span
+                      className={
+                        'text-[10px] font-medium px-1.5 py-0.5 rounded uppercase tracking-wide ' +
+                        (o.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500')
+                      }
+                    >
+                      {o.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="px-5 py-3 border-t border-zinc-100 bg-zinc-50/50">
+            <p className="text-xs text-zinc-500 inline-flex items-center gap-1">
+              Download PDFs from the billing portal <ExternalLink size={11} />
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* Comparison */}
+      {/* Plan comparison */}
       <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-zinc-100">
           <h2 className="text-sm font-semibold text-zinc-900">What you get</h2>
@@ -129,6 +189,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             highlighted
           />
         </div>
+        <div className="px-5 py-3 border-t border-zinc-100 bg-zinc-50/30 text-xs text-zinc-500">
+          Need to compare more? See <Link href="/pricing" className="text-zinc-700 hover:text-zinc-900 transition-colors underline underline-offset-2">full pricing</Link>.
+        </div>
       </div>
     </div>
   );
@@ -148,22 +211,6 @@ function UsageBar({ label, current, max }: { label: string; current: number; max
       <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
         <div className={(danger ? 'bg-red-500' : 'bg-emerald-500') + ' h-full'} style={{ width: `${pct}%` }} />
       </div>
-    </div>
-  );
-}
-
-function UpgradeCard() {
-  return (
-    <div className="bg-white border border-zinc-200 rounded-xl p-5">
-      <BillingClient mode="upgrade" />
-    </div>
-  );
-}
-
-function ManageCard() {
-  return (
-    <div className="bg-white border border-zinc-200 rounded-xl p-5">
-      <BillingClient mode="manage" />
     </div>
   );
 }
@@ -203,4 +250,13 @@ function PlanColumn({
       </ul>
     </div>
   );
+}
+
+function formatMoney(amountCents: number, currency: string) {
+  const major = amountCents / 100;
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(major);
+  } catch {
+    return `${currency.toUpperCase()} ${major.toFixed(2)}`;
+  }
 }
