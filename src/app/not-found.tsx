@@ -8,7 +8,7 @@ export default function NotFound() {
         <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
         </div>
-        <span className="text-sm font-semibold text-zinc-900">Testimonial Collector</span>
+        <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
       </div>
 
       {/* Radar pulse SVG animation */}

@@ -28,9 +28,9 @@ export default async function BuilderLayout({ children, params }: { children: Re
           <path d="M10 46 L8 56 h48 L54 46" />
         </svg>
 
-        <h2 className="text-base font-semibold text-zinc-800 mb-2">Best viewed on desktop</h2>
+        <h2 className="text-base font-semibold text-zinc-800 mb-2">Open the builder on a bigger screen</h2>
         <p className="text-sm text-zinc-400 mb-6 max-w-xs leading-relaxed">
-          The form builder uses drag and drop, which works best on a larger screen.
+          Form editing relies on drag-and-drop. The forms themselves work great on phones — just the editor needs room to breathe.
         </p>
         <Link
           href={`/dashboard/campaigns/${id}`}

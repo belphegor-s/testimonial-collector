@@ -32,11 +32,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl border border-zinc-200 p-8">
         <div className="mb-6">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mb-4">
-            <div className="w-3 h-3 rounded-full bg-emerald-500" />
-          </div>
+          <Link href="/" className="inline-flex items-center gap-2 mb-5">
+            <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            </div>
+            <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
+          </Link>
           <h1 className="text-xl font-semibold text-zinc-900">Welcome back</h1>
-          <p className="text-sm text-zinc-400 mt-1">Sign in to your account</p>
+          <p className="text-sm text-zinc-400 mt-1">Sign in to keep collecting proof</p>
         </div>
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">

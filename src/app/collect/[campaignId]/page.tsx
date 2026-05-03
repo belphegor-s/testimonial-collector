@@ -387,7 +387,7 @@ export default function CollectPage({ params }: { params: Promise<{ campaignId: 
         </div>
 
         <p className="text-center text-xs text-zinc-400 mt-4">
-          Powered by <span className="font-medium text-zinc-500">Testimonial Collector</span>
+          Powered by <a href="https://kudoso.io" target="_blank" rel="noopener" className="font-medium text-zinc-500 hover:text-zinc-700 transition-colors">kudoso</a>
         </p>
       </div>
     </div>
