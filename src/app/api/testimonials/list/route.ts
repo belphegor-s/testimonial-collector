@@ -1,4 +1,3 @@
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { canAccessCampaign } from '@/lib/org';
 
@@ -20,7 +19,6 @@ type Testimonial = {
 export async function GET(req: Request) {
   try {
     const supabase = await createClient();
-    const supabaseAdmin = createAdminClient();
 
     const {
       data: { user },
@@ -90,45 +88,8 @@ export async function GET(req: Request) {
 
     const rows = (data || []) as Testimonial[];
 
-    const videoPaths: string[] = [];
-    for (const r of rows) {
-      if (r.content_type === 'video' && typeof r.video_url === 'string') {
-        videoPaths.push(r.video_url);
-      }
-    }
-
-    const signedMap = new Map<string, string>();
-
-    if (videoPaths.length > 0) {
-      const { data: signedUrls, error: signError } = await supabaseAdmin.storage.from('testimonial-videos').createSignedUrls(videoPaths, 60 * 30);
-
-      if (signError) {
-        console.error('SIGNED_URL_ERROR:', signError);
-      }
-
-      if (signedUrls) {
-        for (const s of signedUrls) {
-          if (s.path && s.signedUrl) {
-            signedMap.set(s.path, s.signedUrl);
-          }
-        }
-      }
-    }
-
-    const finalData = rows.map((item) => {
-      if (item.content_type === 'video' && item.video_url) {
-        const signed = signedMap.get(item.video_url);
-
-        return {
-          ...item,
-          video_url: signed || null,
-        };
-      }
-      return item;
-    });
-
     return Response.json({
-      data: finalData,
+      data: rows,
       total: count ?? 0,
       page,
       pageSize,

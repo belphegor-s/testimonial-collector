@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getActiveOrg, requireRole } from '@/lib/org';
 import { assertCanInviteMember } from '@/lib/plan';
-import { resend } from '@/lib/resend';
+import { sendEmail } from '@/lib/cloudflare-email';
 import { FROM_EMAIL } from '@/lib/email';
 import { randomBytes } from 'crypto';
 import { revalidatePath } from 'next/cache';
@@ -50,7 +50,7 @@ export async function inviteMember(orgId: string, email: string, role: 'admin' |
   const { data: org } = await sb.from('organizations').select('name').eq('id', orgId).single();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM_EMAIL,
     to: email,
     subject: `You've been invited to join ${escapeHtml(org?.name ?? 'a Kudoso workspace')}`,

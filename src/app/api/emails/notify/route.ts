@@ -1,11 +1,9 @@
-import { resend } from '@/lib/resend';
+import { sendEmail } from '@/lib/cloudflare-email';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { escapeHtml } from '@/lib/utils';
 import { FROM_EMAIL } from '@/lib/email';
 import { canAccessCampaign } from '@/lib/org';
-
-export { FROM_EMAIL };
 
 export async function POST(req: Request) {
   // Auth check
@@ -28,7 +26,7 @@ export async function POST(req: Request) {
 
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${testimonial.campaign_id}`;
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM_EMAIL,
     to: user.email ?? '',
     subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
@@ -41,7 +39,7 @@ export async function POST(req: Request) {
           <p style="font-size:14px;color:#52525b;line-height:1.6;margin:8px 0 0;">${escapeHtml(testimonial.text_content || '[Video testimonial]')}</p>
         </div>
         <a href="${dashboardUrl}" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;">
-          Review in dashboard →
+          Review in dashboard
         </a>
       </div>
     `,

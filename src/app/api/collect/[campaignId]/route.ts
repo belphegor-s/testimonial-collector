@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { resend } from '@/lib/resend';
+import { sendEmail } from '@/lib/cloudflare-email';
 import { FROM_EMAIL } from '@/lib/email';
 import Anthropic from '@anthropic-ai/sdk';
 import { FormBlock } from '@/types/form';
@@ -7,6 +7,7 @@ import { escapeHtml } from '@/lib/utils';
 import { assertCanAcceptTestimonial, getOrgPlan } from '@/lib/plan';
 import { deductAiCredit, getAiCredits } from '@/lib/ai';
 import { rateLimit } from '@/lib/rate-limit';
+import { uploadToStream } from '@/lib/cloudflare-stream';
 
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'avi'];
 const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
@@ -77,15 +78,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
     if (videoFile.type && !ALLOWED_VIDEO_MIMES.includes(videoFile.type)) {
       return Response.json({ error: 'Invalid video MIME type.' }, { status: 400 });
     }
-    const path = `${campaignId}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await videoFile.arrayBuffer());
-    const { error: uploadError } = await supabase.storage.from('testimonial-videos').upload(path, buffer, {
-      contentType: videoFile.type || 'video/mp4',
-    });
-    if (uploadError) {
-      return Response.json({ error: 'Video upload failed' }, { status: 500 });
-    }
-    video_url = path;
+    const { hlsUrl } = await uploadToStream(buffer, videoFile.type || 'video/mp4');
+    video_url = hlsUrl;
   }
 
   // Extract fields from schema
@@ -159,7 +154,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
 
     if (recipients.length) {
       const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${campaignId}`;
-      await resend.emails.send({
+      await sendEmail({
         from: FROM_EMAIL,
         to: recipients,
         subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
@@ -172,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
               <p style="font-size:14px;color:#52525b;line-height:1.6;margin:8px 0 0;">${escapeHtml(textContent || '[Video testimonial]')}</p>
             </div>
             <a href="${dashboardUrl}" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;">
-              Review in dashboard →
+              Review in dashboard
             </a>
           </div>
         `,

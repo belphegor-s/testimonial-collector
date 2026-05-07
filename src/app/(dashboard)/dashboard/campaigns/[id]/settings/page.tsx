@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { STATIC_ASSETS_BUCKET_NAME } from '@/data/constants';
 import CampaignForm from '@/components/CampaignForm';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -37,18 +36,16 @@ export default function CampaignSettingsPage({ params }: { params: Promise<{ id:
       let finalLogoUrl = data.logo_url;
 
       if (formData.logoFile) {
-        const ext = formData.logoFile.name.split('.').pop();
-        const path = `logos/${campaignId}.${ext}`;
-
-        const { error } = await supabase.storage.from(STATIC_ASSETS_BUCKET_NAME).upload(path, formData.logoFile, { upsert: true });
-
-        if (error) throw error;
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(STATIC_ASSETS_BUCKET_NAME).getPublicUrl(path);
-
-        finalLogoUrl = publicUrl;
+        const fd = new FormData();
+        fd.set('file', formData.logoFile);
+        fd.set('campaignId', campaignId);
+        const res = await fetch('/api/upload/logo', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const j = await res.json();
+          throw new Error(j.error ?? 'Logo upload failed');
+        }
+        const { url } = await res.json();
+        finalLogoUrl = url;
       }
 
       if (formData.removeLogo) {

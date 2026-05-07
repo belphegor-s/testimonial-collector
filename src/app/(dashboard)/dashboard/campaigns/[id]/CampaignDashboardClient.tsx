@@ -37,6 +37,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Highlight, themes } from 'prism-react-renderer';
+import StreamPlayer from '@/components/StreamPlayer';
 
 // ── Helpers ──────────────────────────────────────────────
 const ACCENT_PRESETS = ['#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'];
@@ -607,7 +608,7 @@ new ResizeObserver(function(){
                       {t.text_content && <p className="text-sm text-zinc-600 leading-relaxed line-clamp-3">{t.text_content}</p>}
                       {t.video_url && !t.text_content && (
                         <div className="mt-2 rounded-lg overflow-hidden bg-black relative">
-                          <video src={t.video_url} className="w-full max-h-40 object-cover" preload="metadata" />
+                          <StreamPlayer src={t.video_url} className="w-full max-h-40 object-cover" controls={false} preload="metadata" />
                           <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                             <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
                               <Play size={16} className="text-zinc-700 ml-0.5" />
@@ -1344,7 +1345,7 @@ new ResizeObserver(function(){
                 {selected.video_url && (
                   <div>
                     <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Video</p>
-                    <video src={selected.video_url} controls playsInline className="w-full rounded-xl bg-black" />
+                    <StreamPlayer src={selected.video_url} controls playsInline className="w-full rounded-xl bg-black" />
                   </div>
                 )}
 

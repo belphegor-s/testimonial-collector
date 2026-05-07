@@ -1,0 +1,6 @@
+name = "kudoso-email"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Secrets (set via: wrangler secret put EMAIL_WORKER_SECRET)
+# Secrets (set via: wrangler secret put DKIM_PRIVATE_KEY)
