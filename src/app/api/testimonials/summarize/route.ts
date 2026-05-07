@@ -1,18 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { checkAiAccess, deductAiCredit } from '@/lib/ai';
 
 const anthropic = new Anthropic();
 
 export async function POST(req: Request) {
-  // Auth check
   const authClient = await createClient();
   const { data: { user } } = await authClient.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id, text } = await req.json();
 
-  // Verify the testimonial belongs to a campaign the user owns
   const { data: testimonial } = await authClient
     .from('testimonials')
     .select('id, campaign_id')
@@ -20,16 +19,11 @@ export async function POST(req: Request) {
     .single();
   if (!testimonial) return Response.json({ error: 'Not found' }, { status: 404 });
 
-  const { data: campaign } = await authClient
-    .from('campaigns')
-    .select('id')
-    .eq('id', testimonial.campaign_id)
-    .eq('owner_id', user.id)
-    .single();
-  if (!campaign) return Response.json({ error: 'Not found' }, { status: 404 });
+  const aiAccess = await checkAiAccess(user.id, testimonial.campaign_id);
+  if (!aiAccess.ok) return Response.json({ error: aiAccess.reason }, { status: 402 });
 
   const msg = await anthropic.messages.create({
-    model: 'claude-opus-4-6',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 100,
     messages: [
       {
@@ -43,6 +37,8 @@ export async function POST(req: Request) {
 
   const supabase = createAdminClient();
   await supabase.from('testimonials').update({ ai_summary: summary }).eq('id', id);
+
+  await deductAiCredit(aiAccess.orgId!, 'summary', id);
 
   return Response.json({ summary });
 }

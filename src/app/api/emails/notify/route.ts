@@ -2,8 +2,10 @@ import { resend } from '@/lib/resend';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { escapeHtml } from '@/lib/utils';
+import { FROM_EMAIL } from '@/lib/email';
+import { canAccessCampaign } from '@/lib/org';
 
-export const FROM_EMAIL = process.env.FROM_EMAIL as string;
+export { FROM_EMAIL };
 
 export async function POST(req: Request) {
   // Auth check
@@ -17,24 +19,18 @@ export async function POST(req: Request) {
 
   const supabase = createAdminClient();
 
-  const { data: testimonial } = await supabase.from('testimonials').select('*, campaigns(name, owner_id)').eq('id', testimonialId).single();
+  const { data: testimonial } = await supabase.from('testimonials').select('*, campaigns(name, organization_id)').eq('id', testimonialId).single();
 
   if (!testimonial) return Response.json({ error: 'Not found' }, { status: 404 });
 
-  // Verify the calling user owns this campaign
-  if (testimonial.campaigns.owner_id !== user.id) {
-    return Response.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  const {
-    data: { user: owner },
-  } = await supabase.auth.admin.getUserById(testimonial.campaigns.owner_id);
+  const access = await canAccessCampaign(user.id, testimonial.campaign_id);
+  if (!access.ok) return Response.json({ error: 'Not found' }, { status: 404 });
 
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${testimonial.campaign_id}`;
 
   await resend.emails.send({
     from: FROM_EMAIL,
-    to: owner?.email ?? '',
+    to: user.email ?? '',
     subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;">

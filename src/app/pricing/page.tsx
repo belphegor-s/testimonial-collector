@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Check, Minus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { getProfile } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 import MarketingNav from '@/components/marketing/MarketingNav';
 import Footer from '@/components/marketing/Footer';
 import PricingToggle from './PricingToggle';
@@ -14,21 +14,22 @@ export default async function PricingPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const loggedIn = !!user;
-  const profile = user ? await getProfile(user.id) : null;
-  const isPro = profile?.plan === 'pro';
+  const activeOrg = user ? await getActiveOrg(user.id) : null;
+  const isPro = activeOrg?.plan === 'pro';
 
   const rows: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
     { label: 'Campaigns', free: '1', pro: 'Unlimited' },
     { label: 'Testimonials per campaign', free: '10', pro: 'Unlimited' },
     { label: 'Text testimonials', free: true, pro: true },
     { label: 'Video testimonials', free: true, pro: true },
-    { label: 'AI summaries', free: true, pro: true },
+    { label: 'AI summaries', free: false, pro: '100 credits/mo included' },
     { label: 'Embeddable widget', free: true, pro: true },
     { label: 'Mobile-friendly forms', free: true, pro: true },
-    { label: 'Sentiment analytics', free: false, pro: true },
+    { label: 'Sentiment analytics', free: false, pro: 'Included in credits' },
+    { label: 'AI credit top-ups', free: false, pro: 'Available as add-ons' },
     { label: 'Custom domains', free: false, pro: 'Up to 5' },
+    { label: 'Team members', free: false, pro: true },
     { label: 'Priority support', free: false, pro: true },
-    { label: 'Remove "Powered by" badge', free: false, pro: 'On request' },
   ];
 
   return (
@@ -84,10 +85,10 @@ export default async function PricingPage() {
           <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mb-8 text-center">Pricing FAQ</h2>
           <div className="space-y-2">
             <Faq q="What payment methods do you take?" a="All major cards via Polar (Stripe-equivalent processor for software). Apple Pay and Google Pay are supported in checkout." />
-            <Faq q="Can I switch between monthly and yearly?" a="Yes. Switch any time from the billing portal — proration happens automatically." />
+            <Faq q="Can I switch between monthly and yearly?" a="Yes. Switch any time from the billing portal. Proration happens automatically." />
             <Faq q="Is there a refund policy?" a="14-day, no-questions refund. Just email hello@kudoso.io." />
             <Faq q="Do you charge per testimonial?" a="No. Pro is unlimited. Free is capped at 10 per campaign so you can try the product end to end." />
-            <Faq q="Do my testimonials disappear if I downgrade?" a="No. Your data stays. You'll just hit the Free limits again — submissions past 10 will be paused until you re-upgrade." />
+            <Faq q="Do my testimonials disappear if I downgrade?" a="No. Your data stays. You'll just hit the Free limits again. Submissions past 10 will be paused until you re-upgrade." />
           </div>
         </div>
       </section>

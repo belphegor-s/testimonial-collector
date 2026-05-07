@@ -30,7 +30,7 @@ export default async function BuilderLayout({ children, params }: { children: Re
 
         <h2 className="text-base font-semibold text-zinc-800 mb-2">Open the builder on a bigger screen</h2>
         <p className="text-sm text-zinc-400 mb-6 max-w-xs leading-relaxed">
-          Form editing relies on drag-and-drop. The forms themselves work great on phones — just the editor needs room to breathe.
+          Form editing relies on drag-and-drop. The forms themselves work great on phones, but the editor needs room to breathe.
         </p>
         <Link
           href={`/dashboard/campaigns/${id}`}

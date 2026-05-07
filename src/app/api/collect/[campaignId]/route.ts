@@ -1,10 +1,12 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resend } from '@/lib/resend';
-import { FROM_EMAIL } from '@/app/api/emails/notify/route';
+import { FROM_EMAIL } from '@/lib/email';
 import Anthropic from '@anthropic-ai/sdk';
 import { FormBlock } from '@/types/form';
 import { escapeHtml } from '@/lib/utils';
-import { assertCanAcceptTestimonial } from '@/lib/plan';
+import { assertCanAcceptTestimonial, getOrgPlan } from '@/lib/plan';
+import { deductAiCredit, getAiCredits } from '@/lib/ai';
+import { rateLimit } from '@/lib/rate-limit';
 
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'avi'];
 const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
@@ -27,10 +29,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ campaignId
 
 export async function POST(req: Request, { params }: { params: Promise<{ campaignId: string }> }) {
   const { campaignId } = await params;
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const rl = await rateLimit(`collect:${ip}:${campaignId}`, 5, 60);
+  if (!rl.ok) {
+    return Response.json({ error: 'Too many submissions. Please wait a moment.' }, { status: 429 });
+  }
+
   const supabase = createAdminClient();
 
-  // Verify campaign exists and get owner_id
-  const { data: campaign } = await supabase.from('campaigns').select('id, name, owner_id').eq('id', campaignId).single();
+  const { data: campaign } = await supabase.from('campaigns').select('id, name, owner_id, organization_id').eq('id', campaignId).single();
 
   if (!campaign) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
@@ -108,35 +116,52 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
     return Response.json({ error: 'Failed to submit testimonial' }, { status: 500 });
   }
 
-  // Summarize with AI (non-blocking — don't fail the submission if this errors)
-  if (textContent) {
+  // Auto-summarize with AI for Pro orgs with available credits (non-blocking)
+  if (textContent && campaign.organization_id) {
     try {
-      const msg = await anthropic.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 100,
-        messages: [
-          {
-            role: 'user',
-            content: `Summarize this testimonial in one punchy sentence for use in marketing copy. Return only the sentence, nothing else.\n\n${textContent}`,
-          },
-        ],
-      });
-      const summary = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      await supabase.from('testimonials').update({ ai_summary: summary }).eq('id', testimonial.id);
+      const orgPlan = await getOrgPlan(campaign.organization_id);
+      const credits = orgPlan === 'pro' ? await getAiCredits(campaign.organization_id) : 0;
+      if (orgPlan === 'pro' && credits > 0) {
+        const msg = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 100,
+          messages: [
+            {
+              role: 'user',
+              content: `Summarize this testimonial in one punchy sentence for use in marketing copy. Return only the sentence, nothing else.\n\n${textContent}`,
+            },
+          ],
+        });
+        const summary = msg.content[0].type === 'text' ? msg.content[0].text : '';
+        await supabase.from('testimonials').update({ ai_summary: summary }).eq('id', testimonial.id);
+        await deductAiCredit(campaign.organization_id, 'summary', testimonial.id);
+      }
     } catch {}
   }
 
-  // Send notification email to campaign owner (non-blocking)
+  // Send notification email to all org owners + admins (non-blocking)
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.admin.getUserById(campaign.owner_id);
+    const { data: campaignFull } = await supabase.from('campaigns').select('organization_id').eq('id', campaignId).single();
 
-    if (user?.email) {
+    const recipients: string[] = [];
+    if (campaignFull?.organization_id) {
+      const { data: members } = await supabase
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', campaignFull.organization_id)
+        .in('role', ['owner', 'admin']);
+      const userIds = (members ?? []).map((m) => m.user_id);
+      for (const uid of userIds) {
+        const { data: u } = await supabase.auth.admin.getUserById(uid);
+        if (u.user?.email) recipients.push(u.user.email);
+      }
+    }
+
+    if (recipients.length) {
       const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${campaignId}`;
       await resend.emails.send({
         from: FROM_EMAIL,
-        to: user.email,
+        to: recipients,
         subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;">

@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { checkAiAccess, deductAiCredit } from '@/lib/ai';
 
 const anthropic = new Anthropic();
 
 export async function POST(req: Request) {
-  // Auth check
   const authClient = await createClient();
   const {
     data: { user },
@@ -14,9 +14,8 @@ export async function POST(req: Request) {
 
   const { campaignId, force } = await req.json();
 
-  // Verify campaign ownership
-  const { data: campaign } = await authClient.from('campaigns').select('id').eq('id', campaignId).eq('owner_id', user.id).single();
-  if (!campaign) return Response.json({ error: 'Not found' }, { status: 404 });
+  const aiAccess = await checkAiAccess(user.id, campaignId);
+  if (!aiAccess.ok) return Response.json({ error: aiAccess.reason }, { status: 402 });
 
   const supabase = createAdminClient();
 
@@ -147,6 +146,8 @@ ${textsForAnalysis}`,
         { onConflict: 'campaign_id' },
       );
     }
+
+    await deductAiCredit(aiAccess.orgId!, 'sentiment', campaignId);
 
     return Response.json({
       sentiments,

@@ -1,7 +1,8 @@
 import { resend } from '@/lib/resend';
 import { createClient } from '@/lib/supabase/server';
-import { FROM_EMAIL } from '../notify/route';
+import { FROM_EMAIL } from '@/lib/email';
 import { escapeHtml } from '@/lib/utils';
+import { canAccessCampaign } from '@/lib/org';
 
 export async function POST(req: Request) {
   const { campaignId, customerEmail, customerName } = await req.json();
@@ -12,8 +13,10 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', campaignId).eq('owner_id', user.id).single();
+  const access = await canAccessCampaign(user.id, campaignId);
+  if (!access.ok) return Response.json({ error: 'Campaign not found' }, { status: 404 });
 
+  const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', campaignId).single();
   if (!campaign) return Response.json({ error: 'Campaign not found' }, { status: 404 });
 
   const collectionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/collect/${campaignId}`;

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { polar } from '@/lib/polar';
-import { getProfile } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 
 export async function POST() {
   const supabase = await createClient();
@@ -9,14 +9,14 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const profile = await getProfile(user.id);
-  if (!profile.polar_customer_id) {
+  const activeOrg = await getActiveOrg(user.id);
+  if (!activeOrg?.polar_customer_id) {
     return Response.json({ error: 'No active subscription found.' }, { status: 400 });
   }
 
   try {
     const session = await polar().customerSessions.create({
-      customerId: profile.polar_customer_id,
+      customerId: activeOrg.polar_customer_id,
     });
     return Response.json({ url: session.customerPortalUrl });
   } catch (err) {

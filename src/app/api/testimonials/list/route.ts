@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { canAccessCampaign } from '@/lib/org';
 
 const ALLOWED_SORT = new Set(['created_at', 'rating', 'customer_name']);
 
@@ -47,9 +48,8 @@ export async function GET(req: Request) {
     const rawSearch = url.searchParams.get('search')?.trim() || '';
     const search = rawSearch.replace(/[,.()"\\]/g, '');
 
-    const { data: campaign } = await supabase.from('campaigns').select('id').eq('id', campaignId).eq('owner_id', user.id).single();
-
-    if (!campaign) {
+    const access = await canAccessCampaign(user.id, campaignId);
+    if (!access.ok) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -1,21 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, Zap } from 'lucide-react';
 
-export default function BillingClient({ mode }: { mode: 'upgrade' | 'manage' }) {
+type Props =
+  | { mode: 'upgrade' | 'manage' }
+  | { mode: 'addon'; addonKey: string };
+
+export default function BillingClient(props: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [interval, setInterval] = useState<'month' | 'year'>('month');
 
-  async function startCheckout() {
+  async function startCheckout(body: Record<string, string>) {
     setLoading(true);
     setError('');
     try {
       const res = await fetch('/api/polar/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ interval }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok || !json.url) throw new Error(json.error || 'Checkout failed');
@@ -40,7 +44,23 @@ export default function BillingClient({ mode }: { mode: 'upgrade' | 'manage' }) 
     }
   }
 
-  if (mode === 'manage') {
+  if (props.mode === 'addon') {
+    return (
+      <div>
+        <button
+          onClick={() => startCheckout({ product: props.addonKey })}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 bg-zinc-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-zinc-700 disabled:opacity-50 transition-colors w-full justify-center"
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+          Buy credits
+        </button>
+        {error && <p className="text-[10px] text-red-500 mt-1">{error}</p>}
+      </div>
+    );
+  }
+
+  if (props.mode === 'manage') {
     return (
       <div>
         <p className="text-sm font-semibold text-zinc-900">Manage subscription</p>
@@ -62,14 +82,14 @@ export default function BillingClient({ mode }: { mode: 'upgrade' | 'manage' }) 
   const yearly = interval === 'year';
   const price = yearly ? '$190' : '$19';
   const cadence = yearly ? 'per year' : 'per month';
-  const sub = yearly ? '~17% off · 2 months free' : 'Cancel anytime';
+  const sub = yearly ? '~17% off, 2 months free' : 'Cancel anytime';
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <div>
           <p className="text-sm font-semibold text-zinc-900">Upgrade to Pro</p>
-          <p className="text-sm text-zinc-500 mt-1">Unlimited campaigns, unlimited testimonials, custom domains.</p>
+          <p className="text-sm text-zinc-500 mt-1">Unlimited campaigns, testimonials, custom domains, AI credits.</p>
         </div>
         <div className="inline-flex bg-zinc-100 rounded-lg p-0.5 text-xs font-medium shrink-0">
           <button
@@ -94,7 +114,7 @@ export default function BillingClient({ mode }: { mode: 'upgrade' | 'manage' }) 
       <p className="text-xs text-zinc-400 mt-1 mb-5">{sub}</p>
 
       <button
-        onClick={startCheckout}
+        onClick={() => startCheckout({ interval })}
         disabled={loading}
         className="inline-flex items-center gap-2 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
       >

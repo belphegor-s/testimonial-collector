@@ -5,23 +5,25 @@ import { promises as dns } from 'dns';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requirePro } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 
-const MAX_DOMAINS_PER_USER = 5;
+const MAX_DOMAINS_PER_ORG = 5;
 const HOSTNAME_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/i;
 
-async function authedUser() {
+async function authedProOrg() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
-  if (!(await requirePro(user.id))) throw new Error('Custom domains require the Pro plan.');
-  return user;
+  const org = await getActiveOrg(user.id);
+  if (!org) throw new Error('No active organization');
+  if (org.plan !== 'pro') throw new Error('Custom domains require the Pro plan.');
+  return { user, org };
 }
 
 export async function addDomainAction(formData: FormData) {
-  const user = await authedUser();
+  const { org } = await authedProOrg();
   const hostnameRaw = String(formData.get('hostname') || '').trim().toLowerCase();
   const campaignId = String(formData.get('campaignId') || '').trim();
 
@@ -35,23 +37,20 @@ export async function addDomainAction(formData: FormData) {
 
   const sb = createAdminClient();
 
-  // Verify campaign belongs to user
-  const { data: campaign } = await sb.from('campaigns').select('id').eq('id', campaignId).eq('owner_id', user.id).maybeSingle();
+  const { data: campaign } = await sb.from('campaigns').select('id').eq('id', campaignId).eq('organization_id', org.id).maybeSingle();
   if (!campaign) return { ok: false, error: 'Campaign not found.' };
 
-  // Cap
-  const { count } = await sb.from('custom_domains').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
-  if ((count ?? 0) >= MAX_DOMAINS_PER_USER) {
-    return { ok: false, error: `You can add up to ${MAX_DOMAINS_PER_USER} custom domains. Remove one first.` };
+  const { count } = await sb.from('custom_domains').select('*', { count: 'exact', head: true }).eq('organization_id', org.id);
+  if ((count ?? 0) >= MAX_DOMAINS_PER_ORG) {
+    return { ok: false, error: `You can add up to ${MAX_DOMAINS_PER_ORG} custom domains. Remove one first.` };
   }
 
-  // Hostname uniqueness
   const { data: existing } = await sb.from('custom_domains').select('id').eq('hostname', hostnameRaw).maybeSingle();
   if (existing) return { ok: false, error: 'That hostname is already in use.' };
 
   const verification_token = randomBytes(16).toString('hex');
   const { error } = await sb.from('custom_domains').insert({
-    user_id: user.id,
+    organization_id: org.id,
     campaign_id: campaignId,
     hostname: hostnameRaw,
     verification_token,
@@ -63,15 +62,12 @@ export async function addDomainAction(formData: FormData) {
 }
 
 export async function verifyDomainAction(domainId: string) {
-  const user = await authedUser();
+  const { org } = await authedProOrg();
   const sb = createAdminClient();
 
-  const { data: row } = await sb.from('custom_domains').select('*').eq('id', domainId).eq('user_id', user.id).maybeSingle();
+  const { data: row } = await sb.from('custom_domains').select('*').eq('id', domainId).eq('organization_id', org.id).maybeSingle();
   if (!row) return { ok: false, error: 'Domain not found' };
 
-  // Two acceptable paths:
-  // 1) CNAME → proxy.kudoso.io (or kudoso.io)
-  // 2) TXT _kudoso-verify.<host> = <verification_token>
   let verified = false;
 
   try {
@@ -99,9 +95,9 @@ export async function verifyDomainAction(domainId: string) {
 }
 
 export async function deleteDomainAction(domainId: string) {
-  const user = await authedUser();
+  const { org } = await authedProOrg();
   const sb = createAdminClient();
-  const { error } = await sb.from('custom_domains').delete().eq('id', domainId).eq('user_id', user.id);
+  const { error } = await sb.from('custom_domains').delete().eq('id', domainId).eq('organization_id', org.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/dashboard/settings/domains');
   return { ok: true };

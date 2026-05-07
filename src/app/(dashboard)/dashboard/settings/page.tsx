@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getProfile } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 import SettingsClient from './SettingsClient';
 
 export const metadata = { title: 'Settings' };
@@ -12,7 +12,8 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const profile = await getProfile(user.id);
+  const activeOrg = await getActiveOrg(user.id);
+  const plan = activeOrg?.plan ?? 'free';
 
   return (
     <div className="space-y-6">
@@ -21,7 +22,7 @@ export default async function SettingsPage() {
         <p className="text-sm text-zinc-400 mt-0.5">Account preferences</p>
       </div>
 
-      <SettingsClient email={user.email ?? ''} plan={profile.plan} />
+      <SettingsClient email={user.email ?? ''} plan={plan} />
     </div>
   );
 }

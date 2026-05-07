@@ -1,12 +1,15 @@
 import { Polar } from '@polar-sh/sdk';
 
 const POLAR_PLAN_KEY = 'kudoso_plan';
+const POLAR_ADDON_KEY = 'kudoso_addon';
 
 export type PolarPlanKey = 'pro_monthly' | 'pro_yearly';
 export type ProductIds = Record<PolarPlanKey, string>;
+export type AddonProductIds = Record<'credits_50' | 'credits_200' | 'credits_500', string>;
 
 let cachedClient: Polar | null = null;
 let cachedProducts: ProductIds | null = null;
+let cachedAddonProducts: AddonProductIds | null = null;
 
 export function polar() {
   if (!cachedClient) {
@@ -72,6 +75,55 @@ export async function ensureProducts(): Promise<ProductIds> {
     pro_yearly: existing.pro_yearly,
   };
   return cachedProducts;
+}
+
+export async function ensureAddonProducts(): Promise<AddonProductIds> {
+  if (cachedAddonProducts) return cachedAddonProducts;
+
+  const client = polar();
+  const orgId = process.env.POLAR_ORGANIZATION_ID || undefined;
+
+  const existing: Record<string, string> = {};
+  const iterator = await client.products.list({
+    organizationId: orgId,
+    isArchived: false,
+    limit: 100,
+  });
+
+  for await (const page of iterator) {
+    for (const product of page.result.items) {
+      const addonKey = (product.metadata as Record<string, unknown> | null | undefined)?.[POLAR_ADDON_KEY];
+      if (typeof addonKey === 'string' && addonKey.startsWith('credits_')) {
+        existing[addonKey] = product.id;
+      }
+    }
+  }
+
+  const addonDefs: Array<{ key: string; name: string; amount: number; credits: number }> = [
+    { key: 'credits_50', name: 'Kudoso AI Credits (50)', amount: 500, credits: 50 },
+    { key: 'credits_200', name: 'Kudoso AI Credits (200)', amount: 1500, credits: 200 },
+    { key: 'credits_500', name: 'Kudoso AI Credits (500)', amount: 2900, credits: 500 },
+  ];
+
+  for (const def of addonDefs) {
+    if (!existing[def.key]) {
+      const product = await client.products.create({
+        name: def.name,
+        description: `${def.credits} AI credits for summaries and sentiment analysis on Kudoso.`,
+        metadata: { [POLAR_ADDON_KEY]: def.key, credits: String(def.credits) },
+        prices: [{ amountType: 'fixed', priceAmount: def.amount, priceCurrency: 'usd' }],
+        organizationId: orgId,
+      });
+      existing[def.key] = product.id;
+    }
+  }
+
+  cachedAddonProducts = {
+    credits_50: existing.credits_50,
+    credits_200: existing.credits_200,
+    credits_500: existing.credits_500,
+  };
+  return cachedAddonProducts;
 }
 
 export function appUrl() {

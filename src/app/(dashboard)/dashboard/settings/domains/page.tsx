@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getPlan } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 import { Globe, Lock, Sparkles } from 'lucide-react';
 import DomainsClient from './DomainsClient';
 
@@ -15,11 +15,13 @@ export default async function DomainsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const plan = await getPlan(user.id);
+  const activeOrg = await getActiveOrg(user.id);
+  if (!activeOrg) redirect('/login');
+  const plan = activeOrg.plan;
 
   const sb = createAdminClient();
-  const { data: campaigns } = await sb.from('campaigns').select('id, name').eq('owner_id', user.id).order('created_at', { ascending: false });
-  const { data: domains } = await sb.from('custom_domains').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  const { data: campaigns } = await sb.from('campaigns').select('id, name').eq('organization_id', activeOrg.id).order('created_at', { ascending: false });
+  const { data: domains } = await sb.from('custom_domains').select('*').eq('organization_id', activeOrg.id).order('created_at', { ascending: false });
 
   return (
     <div className="space-y-6">

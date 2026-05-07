@@ -45,7 +45,7 @@ export default function SignupPage() {
             <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
           </Link>
           <h1 className="text-xl font-semibold text-zinc-900">Create account</h1>
-          <p className="text-sm text-zinc-400 mt-1">Free for one campaign — upgrade anytime</p>
+          <p className="text-sm text-zinc-400 mt-1">Free for one campaign, upgrade anytime</p>
         </div>
 
         <GoogleAuthButton label="Sign up with Google" />

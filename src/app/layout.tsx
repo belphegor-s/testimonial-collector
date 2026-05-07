@@ -15,13 +15,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Kudoso — Collect testimonials your customers will brag about',
-    template: '%s — Kudoso',
+    default: 'Kudoso  | Collect testimonials your customers will brag about',
+    template: '%s  | Kudoso',
   },
   description: 'Beautiful, embeddable testimonial pages for indie SaaS founders, agencies, and creators. Collect text + video proof in minutes.',
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://kudoso.io'),
   openGraph: {
-    title: 'Kudoso — Collect testimonials your customers will brag about',
+    title: 'Kudoso  | Collect testimonials your customers will brag about',
     description: 'Beautiful, embeddable testimonial pages. Free to start, $19/mo for unlimited + custom domains.',
     url: '/',
     siteName: 'Kudoso',

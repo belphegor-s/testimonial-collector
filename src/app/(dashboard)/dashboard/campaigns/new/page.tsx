@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { assertCanCreateCampaign, FREE_CAMPAIGN_LIMIT, getCampaignCount, getPlan } from '@/lib/plan';
+import { assertCanCreateCampaign, FREE_CAMPAIGN_LIMIT, getOrgCampaignCount, getOrgPlan } from '@/lib/plan';
+import { getActiveOrg } from '@/lib/org';
 import NewCampaignForm from './NewCampaignForm';
 
 export default async function NewCampaignPage() {
@@ -12,9 +13,12 @@ export default async function NewCampaignPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const plan = await getPlan(user.id);
-  const count = plan === 'free' ? await getCampaignCount(user.id) : 0;
-  const gate = await assertCanCreateCampaign(user.id);
+  const activeOrg = await getActiveOrg(user.id);
+  if (!activeOrg) redirect('/login');
+
+  const plan = await getOrgPlan(activeOrg.id);
+  const count = plan === 'free' ? await getOrgCampaignCount(activeOrg.id) : 0;
+  const gate = await assertCanCreateCampaign(activeOrg.id);
 
   return (
     <div>
@@ -33,17 +37,17 @@ export default async function NewCampaignPage() {
             href="/dashboard/billing"
             className="inline-flex items-center bg-zinc-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-700 transition-colors"
           >
-            Upgrade to Pro — $19/mo
+            Upgrade to Pro: $19/mo
           </Link>
         </div>
       ) : (
         <>
           {plan === 'free' && (
             <p className="text-xs text-zinc-400 mb-3">
-              Free plan — {count}/{FREE_CAMPAIGN_LIMIT} campaign used
+              Free plan: {count}/{FREE_CAMPAIGN_LIMIT} campaign used in {activeOrg.name}
             </p>
           )}
-          <NewCampaignForm />
+          <NewCampaignForm organizationId={activeOrg.id} />
         </>
       )}
     </div>

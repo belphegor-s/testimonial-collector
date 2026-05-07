@@ -5,7 +5,7 @@ import { useState } from 'react';
 import CampaignForm from '@/components/CampaignForm';
 import { createClient } from '@/lib/supabase/client';
 
-export default function NewCampaignForm() {
+export default function NewCampaignForm({ organizationId }: { organizationId: string }) {
   const router = useRouter();
   const supabase = createClient();
   const [error, setError] = useState('');
@@ -30,6 +30,7 @@ export default function NewCampaignForm() {
         brand_color: data.brandColor,
         thank_you_message: data.thankYouMessage,
         owner_id: user.id,
+        organization_id: organizationId,
       })
       .select()
       .single();

@@ -1,15 +1,23 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
 import { SendRequestForm } from '@/components/SendRequestForm';
 import { ArrowLeft } from 'lucide-react';
 import CampaignDashboardClient from './CampaignDashboardClient';
+import { canAccessCampaign } from '@/lib/org';
 
 export default async function CampaignPage({ params }: { params: { id: string } }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) notFound();
 
+  const access = await canAccessCampaign(user.id, id);
+  if (!access.ok) notFound();
+
+  const supabase = createAdminClient();
   const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', id).single();
   if (!campaign) notFound();
 
