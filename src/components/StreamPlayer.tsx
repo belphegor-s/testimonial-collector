@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import type Hls from 'hls.js';
 
 type Props = {
   src: string;
@@ -13,6 +14,7 @@ type Props = {
 
 export default function StreamPlayer({ src, className, controls = true, playsInline = true, preload = 'metadata', poster }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
 
   useEffect(() => {
     if (!src || !videoRef.current) return;
@@ -21,22 +23,26 @@ export default function StreamPlayer({ src, className, controls = true, playsInl
 
     if (src.endsWith('.m3u8')) {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari: native HLS support
         video.src = src;
       } else {
-        // Chrome/Firefox: use hls.js
-        import('hls.js').then(({ default: Hls }) => {
-          if (Hls.isSupported()) {
-            const hls = new Hls({ startLevel: -1 });
+        import('hls.js').then(({ default: HlsLib }) => {
+          if (HlsLib.isSupported()) {
+            hlsRef.current?.destroy();
+            const hls = new HlsLib({ startLevel: -1 });
+            hlsRef.current = hls;
             hls.loadSource(src);
             hls.attachMedia(video);
-            return () => hls.destroy();
           }
         });
       }
     } else {
       video.src = src;
     }
+
+    return () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
   }, [src]);
 
   return (

@@ -50,8 +50,13 @@ export default {
     }
 
     try {
+      // Parse "Display Name <email>" or bare "email"
+      const addrMatch = from.match(/<([^>]+)>/);
+      const emailAddr = addrMatch ? addrMatch[1] : from;
+      const displayName = addrMatch ? from.split('<')[0].trim().replace(/^"|"$/g, '') || 'Kudoso' : 'Kudoso';
+
       const msg = createMimeMessage();
-      msg.setSender({ name: 'Kudoso', addr: from });
+      msg.setSender({ name: displayName, addr: emailAddr });
       msg.setRecipient(to);
       msg.setSubject(subject);
       msg.addMessage({ contentType: 'text/html', data: html });
