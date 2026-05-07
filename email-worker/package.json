@@ -7,10 +7,10 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "mimetext": "^3.0.26"
+    "mimetext": "^3.0.28"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250508.0",
-    "wrangler": "^3.114.0"
+    "@cloudflare/workers-types": "^4.20260507.1",
+    "wrangler": "^4.89.0"
   }
 }

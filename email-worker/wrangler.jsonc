@@ -1,15 +1,18 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "kudoso-email",
   "main": "src/index.ts",
-  "compatibility_date": "2025-01-01",
-
-  // send_email binding — unrestricted, can send to any recipient
+  "compatibility_date": "2026-05-07",
+  "compatibility_flags": ["nodejs_compat"],
   "send_email": [
     {
       "name": "SEB"
     }
+  ],
+  "routes": [
+    {
+      "pattern": "email-worker.kudoso.io",
+      "custom_domain": true
+    }
   ]
-
-  // Secrets (set via wrangler secret put):
-  //   EMAIL_WORKER_SECRET  — shared secret between Next.js app and this worker
 }
