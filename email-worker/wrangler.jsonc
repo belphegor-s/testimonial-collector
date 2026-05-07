@@ -1,0 +1,15 @@
+{
+  "name": "kudoso-email",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+
+  // send_email binding — unrestricted, can send to any recipient
+  "send_email": [
+    {
+      "name": "SEB"
+    }
+  ]
+
+  // Secrets (set via wrangler secret put):
+  //   EMAIL_WORKER_SECRET  — shared secret between Next.js app and this worker
+}
