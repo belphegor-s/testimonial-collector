@@ -11,7 +11,7 @@ export default function Footer() {
           <span className="font-semibold text-zinc-900 tracking-tight">kudoso</span>
           <span className="text-xs text-zinc-400 ml-2">© {new Date().getFullYear()}</span>
         </div>
-        <div className="flex items-center gap-5 text-zinc-500">
+        <div className="flex flex-wrap items-center gap-5 text-zinc-500">
           <Link href="/pricing" className="hover:text-zinc-900 transition-colors">
             Pricing
           </Link>
@@ -21,6 +21,12 @@ export default function Footer() {
           <a href="mailto:hello@kudoso.io" className="hover:text-zinc-900 transition-colors">
             Contact
           </a>
+          <Link href="/privacy" className="hover:text-zinc-900 transition-colors">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-zinc-900 transition-colors">
+            Terms
+          </Link>
         </div>
       </div>
     </footer>
