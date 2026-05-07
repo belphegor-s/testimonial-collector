@@ -1,6 +1,9 @@
+import { EmailMessage } from 'cloudflare:email';
+import { createMimeMessage } from 'mimetext';
+
 interface Env {
   EMAIL_WORKER_SECRET: string;
-  DKIM_PRIVATE_KEY: string;
+  SEB: SendEmail;
 }
 
 interface EmailBody {
@@ -35,7 +38,7 @@ export default {
 
     let body: EmailBody;
     try {
-      body = await req.json() as EmailBody;
+      body = (await req.json()) as EmailBody;
     } catch {
       return new Response('Invalid JSON', { status: 400 });
     }
@@ -46,28 +49,19 @@ export default {
       return new Response('Missing required fields: to, subject, html', { status: 400 });
     }
 
-    const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        personalizations: [
-          {
-            to: [{ email: to }],
-            dkim_domain: 'kudoso.io',
-            dkim_selector: 'mailchannels',
-            dkim_private_key: env.DKIM_PRIVATE_KEY,
-          },
-        ],
-        from: { email: from, name: 'Kudoso' },
-        subject,
-        content: [{ type: 'text/html; charset=utf-8', value: html }],
-      }),
-    });
+    try {
+      const msg = createMimeMessage();
+      msg.setSender({ name: 'Kudoso', addr: from });
+      msg.setRecipient(to);
+      msg.setSubject(subject);
+      msg.addMessage({ contentType: 'text/html', data: html });
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error('MailChannels error:', res.status, text);
-      return new Response(`Email send failed: ${text}`, { status: 502 });
+      const message = new EmailMessage(from, to, msg.asRaw());
+      await env.SEB.send(message);
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.error('Email send error:', err);
+      return new Response(`Email send failed: ${err}`, { status: 502 });
     }
 
     return new Response('OK', { status: 200, headers: corsHeaders });
