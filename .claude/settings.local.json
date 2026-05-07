@@ -1,8 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(npx next:*)",
-      "Bash(wc:*)"
-    ]
+    "allow": ["Bash(npx next:*)", "Bash(wc:*)"]
   }
 }
