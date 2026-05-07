@@ -9,11 +9,13 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Ensure columns exist even if table was pre-existing without them
+-- Ensure all columns exist even if table was pre-existing without them
+alter table public.profiles add column if not exists email text;
 alter table public.profiles add column if not exists plan text not null default 'free';
 alter table public.profiles add column if not exists polar_customer_id text;
 alter table public.profiles add column if not exists polar_subscription_id text;
 alter table public.profiles add column if not exists plan_renews_at timestamptz;
+alter table public.profiles add column if not exists created_at timestamptz not null default now();
 
 create index if not exists profiles_polar_customer_id_idx on public.profiles (polar_customer_id);
 create index if not exists profiles_polar_subscription_id_idx on public.profiles (polar_subscription_id);
