@@ -23,7 +23,7 @@ async function authedProOrg() {
 }
 
 export async function addDomainAction(formData: FormData) {
-  const { org } = await authedProOrg();
+  const { user, org } = await authedProOrg();
   const hostnameRaw = String(formData.get('hostname') || '').trim().toLowerCase();
   const campaignId = String(formData.get('campaignId') || '').trim();
 
@@ -51,6 +51,7 @@ export async function addDomainAction(formData: FormData) {
   const verification_token = randomBytes(16).toString('hex');
   const { error } = await sb.from('custom_domains').insert({
     organization_id: org.id,
+    user_id: user.id,
     campaign_id: campaignId,
     hostname: hostnameRaw,
     verification_token,
