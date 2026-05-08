@@ -84,7 +84,7 @@ export default async function PricingPage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-20">
           <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mb-8 text-center">Pricing FAQ</h2>
           <div className="space-y-2">
-            <Faq q="What payment methods do you take?" a="All major cards via Polar (Stripe-equivalent processor for software). Apple Pay and Google Pay are supported in checkout." />
+            <Faq q="What payment methods do you take?" a="All major credit and debit cards via Polar. Apple Pay and Google Pay are supported in checkout." />
             <Faq q="Can I switch between monthly and yearly?" a="Yes. Switch any time from the billing portal. Proration happens automatically." />
             <Faq q="Is there a refund policy?" a="14-day, no-questions refund. Just email hello@kudoso.io." />
             <Faq q="Do you charge per testimonial?" a="No. Pro is unlimited. Free is capped at 10 per campaign so you can try the product end to end." />

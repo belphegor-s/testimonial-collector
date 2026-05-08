@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
 
   const supabase = createAdminClient();
 
-  const { data: campaign } = await supabase.from('campaigns').select('id, name, owner_id, organization_id').eq('id', campaignId).single();
+  const { data: campaign } = await supabase.from('campaigns').select('id, name, organization_id').eq('id', campaignId).single();
 
   if (!campaign) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });

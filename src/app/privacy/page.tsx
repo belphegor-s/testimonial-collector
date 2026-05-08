@@ -45,7 +45,7 @@ export default function PrivacyPage() {
             <p><strong className="text-zinc-800">Account data</strong> &mdash; When you create an account we store your email address and a hashed password (or, if you sign in with Google, your Google account identifier). We do not store your Google password.</p>
             <p><strong className="text-zinc-800">Testimonial content</strong> &mdash; When your customers submit testimonials through your Kudoso campaign pages, we store their name, email address (if requested), written responses, and video uploads. You own this content. We process it on your behalf.</p>
             <p><strong className="text-zinc-800">Usage data</strong> &mdash; We log page views, API request counts, and feature usage (e.g. number of campaigns created) to operate the service and detect abuse. We do not sell or share this data.</p>
-            <p><strong className="text-zinc-800">Billing data</strong> &mdash; Payment processing is handled entirely by Polar / Stripe. We store only a customer identifier and subscription status returned by Polar. We never see or store full card numbers.</p>
+            <p><strong className="text-zinc-800">Billing data</strong> &mdash; Payment processing is handled entirely by Polar. We store only a customer identifier and subscription status returned by Polar. We never see or store full card numbers.</p>
             <p><strong className="text-zinc-800">Cookies</strong> &mdash; We set a session cookie for authentication (required to log in), an active-organization cookie to remember which workspace you&apos;re using, and no third-party advertising or tracking cookies.</p>
           </Section>
 
@@ -82,9 +82,9 @@ export default function PrivacyPage() {
                 <tbody className="divide-y divide-zinc-100">
                   {[
                     ['Supabase', 'Database, auth, file storage', 'All app data (hosted on AWS eu-west-1)'],
-                    ['Resend', 'Transactional email', 'Recipient email, email body'],
+                    ['Cloudflare', 'Email delivery, video hosting, static assets', 'Email content, video uploads, logos'],
                     ['Anthropic', 'AI summaries + sentiment', 'Testimonial text (when you trigger AI)'],
-                    ['Polar / Stripe', 'Payment processing', 'Name, email, payment data'],
+                    ['Polar', 'Payment processing', 'Name, email, payment data'],
                   ].map(([service, purpose, data]) => (
                     <tr key={service}>
                       <td className="px-3 py-2 font-medium text-zinc-800">{service}</td>
