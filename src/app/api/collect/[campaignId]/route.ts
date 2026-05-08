@@ -1,4 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { eq, and, inArray } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { sendEmail } from '@/lib/cloudflare-email';
 import { FROM_EMAIL } from '@/lib/email';
 import Anthropic from '@anthropic-ai/sdk';
@@ -11,17 +13,26 @@ import { uploadToStream } from '@/lib/cloudflare-stream';
 
 const ALLOWED_VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'avi'];
 const ALLOWED_VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
 const anthropic = new Anthropic();
 
 export async function GET(_: Request, { params }: { params: Promise<{ campaignId: string }> }) {
   const { campaignId } = await params;
-  const supabase = createAdminClient();
 
-  const { data, error } = await supabase.from('campaigns').select('id, name, brand_color, logo_url, thank_you_message, form_schema').eq('id', campaignId).single();
+  const [data] = await db
+    .select({
+      id: schema.campaigns.id,
+      name: schema.campaigns.name,
+      brand_color: schema.campaigns.brandColor,
+      logo_url: schema.campaigns.logoUrl,
+      thank_you_message: schema.campaigns.thankYouMessage,
+      form_schema: schema.campaigns.formSchema,
+    })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, campaignId));
 
-  if (error || !data) {
+  if (!data) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
   }
 
@@ -37,15 +48,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
     return Response.json({ error: 'Too many submissions. Please wait a moment.' }, { status: 429 });
   }
 
-  const supabase = createAdminClient();
-
-  const { data: campaign } = await supabase.from('campaigns').select('id, name, organization_id').eq('id', campaignId).single();
+  const [campaign] = await db
+    .select({
+      id: schema.campaigns.id,
+      name: schema.campaigns.name,
+      organizationId: schema.campaigns.organizationId,
+    })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, campaignId));
 
   if (!campaign) {
     return Response.json({ error: 'Campaign not found' }, { status: 404 });
   }
 
-  // Plan gate: free-tier owners cap at 10 testimonials per campaign
   const gate = await assertCanAcceptTestimonial(campaignId);
   if (!gate.ok) {
     return Response.json({ error: gate.reason ?? 'Submissions are paused for this campaign.' }, { status: 403 });
@@ -54,19 +69,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
   const formData = await req.formData();
 
   let formValues: Record<string, any>;
-  let schema: FormBlock[];
+  let formSchema: FormBlock[];
   try {
     formValues = JSON.parse(formData.get('formValues') as string);
-    schema = JSON.parse(formData.get('schema') as string);
+    formSchema = JSON.parse(formData.get('schema') as string);
   } catch {
     return Response.json({ error: 'Invalid form data' }, { status: 400 });
   }
 
   const videoFile = formData.get('video') as File | null;
-
   let video_url = null;
 
-  // Handle video upload
   if (videoFile && videoFile.size > 0) {
     if (videoFile.size > MAX_VIDEO_SIZE) {
       return Response.json({ error: 'File too large. Maximum size is 50MB.' }, { status: 400 });
@@ -83,87 +96,74 @@ export async function POST(req: Request, { params }: { params: Promise<{ campaig
     video_url = hlsUrl;
   }
 
-  // Extract fields from schema
-  const nameBlock = schema.find((b) => b.type === 'text' && b.label.toLowerCase().includes('name'));
-  const textBlock = schema.find((b) => b.type === 'textarea');
-  const ratingBlock = schema.find((b) => b.type === 'rating');
-  const titleBlock = schema.find((b) => b.type === 'text' && !b.label.toLowerCase().includes('name'));
+  const nameBlock = formSchema.find((b) => b.type === 'text' && b.label.toLowerCase().includes('name'));
+  const textBlock = formSchema.find((b) => b.type === 'textarea');
+  const ratingBlock = formSchema.find((b) => b.type === 'rating');
+  const titleBlock = formSchema.find((b) => b.type === 'text' && !b.label.toLowerCase().includes('name'));
 
   const textContent = formValues[textBlock?.id ?? ''] || null;
 
-  // Insert testimonial
-  const { data: testimonial, error: insertError } = await supabase
-    .from('testimonials')
-    .insert({
-      campaign_id: campaignId,
-      customer_name: formValues[nameBlock?.id ?? ''] ?? '',
-      customer_title: formValues[titleBlock?.id ?? ''] ?? '',
-      content_type: videoFile && videoFile.size > 0 ? 'video' : 'text',
-      text_content: textContent,
-      video_url,
+  const [testimonial] = await db
+    .insert(schema.testimonials)
+    .values({
+      campaignId,
+      customerName: formValues[nameBlock?.id ?? ''] ?? '',
+      customerTitle: formValues[titleBlock?.id ?? ''] ?? '',
+      contentType: videoFile && videoFile.size > 0 ? 'video' : 'text',
+      textContent,
+      videoUrl: video_url,
       rating: formValues[ratingBlock?.id ?? ''] ?? 5,
-      form_data: formValues,
+      formData: formValues,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (insertError) {
+  if (!testimonial) {
     return Response.json({ error: 'Failed to submit testimonial' }, { status: 500 });
   }
 
-  // Auto-summarize with AI for Pro orgs with available credits (non-blocking)
-  if (textContent && campaign.organization_id) {
+  // Auto-summarize for Pro orgs with credits (non-blocking)
+  if (textContent && campaign.organizationId) {
     try {
-      const orgPlan = await getOrgPlan(campaign.organization_id);
-      const credits = orgPlan === 'pro' ? await getAiCredits(campaign.organization_id) : 0;
+      const orgPlan = await getOrgPlan(campaign.organizationId);
+      const credits = orgPlan === 'pro' ? await getAiCredits(campaign.organizationId) : 0;
       if (orgPlan === 'pro' && credits > 0) {
         const msg = await anthropic.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 100,
-          messages: [
-            {
-              role: 'user',
-              content: `Summarize this testimonial in one punchy sentence for use in marketing copy. Return only the sentence, nothing else.\n\n${textContent}`,
-            },
-          ],
+          messages: [{ role: 'user', content: `Summarize this testimonial in one punchy sentence for use in marketing copy. Return only the sentence, nothing else.\n\n${textContent}` }],
         });
         const summary = msg.content[0].type === 'text' ? msg.content[0].text : '';
-        await supabase.from('testimonials').update({ ai_summary: summary }).eq('id', testimonial.id);
-        await deductAiCredit(campaign.organization_id, 'summary', testimonial.id);
+        await db.update(schema.testimonials).set({ aiSummary: summary }).where(eq(schema.testimonials.id, testimonial.id));
+        await deductAiCredit(campaign.organizationId, 'summary', testimonial.id);
       }
     } catch {}
   }
 
-  // Send notification email to all org owners + admins (non-blocking)
+  // Notify org owners + admins (non-blocking)
   try {
-    const { data: campaignFull } = await supabase.from('campaigns').select('organization_id').eq('id', campaignId).single();
+    const members = await db
+      .select({ email: schema.users.email })
+      .from(schema.organizationMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.organizationMembers.userId))
+      .where(and(
+        eq(schema.organizationMembers.organizationId, campaign.organizationId),
+        inArray(schema.organizationMembers.role, ['owner', 'admin']),
+      ));
 
-    const recipients: string[] = [];
-    if (campaignFull?.organization_id) {
-      const { data: members } = await supabase
-        .from('organization_members')
-        .select('user_id')
-        .eq('organization_id', campaignFull.organization_id)
-        .in('role', ['owner', 'admin']);
-      const userIds = (members ?? []).map((m) => m.user_id);
-      for (const uid of userIds) {
-        const { data: u } = await supabase.auth.admin.getUserById(uid);
-        if (u.user?.email) recipients.push(u.user.email);
-      }
-    }
+    const recipients = members.map((m) => m.email).filter(Boolean) as string[];
 
     if (recipients.length) {
       const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns/${campaignId}`;
       await sendEmail({
         from: FROM_EMAIL,
         to: recipients,
-        subject: `New testimonial from ${escapeHtml(testimonial.customer_name)}`,
+        subject: `New testimonial from ${escapeHtml(testimonial.customerName)}`,
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;">
             <h1 style="font-size:18px;font-weight:600;color:#18181b;margin:0 0 4px;">New testimonial received</h1>
             <p style="font-size:13px;color:#a1a1aa;margin:0 0 24px;">Campaign: ${escapeHtml(campaign.name)}</p>
             <div style="background:#f4f4f5;border-radius:10px;padding:16px 20px;margin-bottom:24px;">
-              <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 4px;">${escapeHtml(testimonial.customer_name)}${testimonial.customer_title ? ` · ${escapeHtml(testimonial.customer_title)}` : ''}</p>
+              <p style="font-size:14px;font-weight:600;color:#18181b;margin:0 0 4px;">${escapeHtml(testimonial.customerName)}${testimonial.customerTitle ? ` · ${escapeHtml(testimonial.customerTitle)}` : ''}</p>
               <p style="font-size:14px;color:#52525b;line-height:1.6;margin:8px 0 0;">${escapeHtml(textContent || '[Video testimonial]')}</p>
             </div>
             <a href="${dashboardUrl}" style="display:inline-block;background:#18181b;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;">

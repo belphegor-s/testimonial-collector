@@ -1,4 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { eq, count } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { getActiveOrg } from '@/lib/org';
 import type { OrgPlan } from '@/lib/org';
 
@@ -6,37 +8,28 @@ export type Plan = OrgPlan;
 
 export const FREE_CAMPAIGN_LIMIT = 1;
 export const FREE_TESTIMONIAL_LIMIT = 10;
-export const FREE_MEMBER_LIMIT = 1; // solo only
+export const FREE_MEMBER_LIMIT = 1;
 
 export async function getOrgPlan(orgId: string): Promise<Plan> {
-  const sb = createAdminClient();
-  const { data } = await sb.from('organizations').select('plan').eq('id', orgId).maybeSingle();
-  return (data?.plan as Plan | undefined) ?? 'free';
+  const [row] = await db.select({ plan: schema.organizations.plan }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  return ((row?.plan as Plan | undefined) ?? 'free');
 }
 
 export async function getOrgCampaignCount(orgId: string): Promise<number> {
-  const sb = createAdminClient();
-  const { count } = await sb
-    .from('campaigns')
-    .select('*', { count: 'exact', head: true })
-    .eq('organization_id', orgId);
-  return count ?? 0;
+  const [row] = await db.select({ value: count() }).from(schema.campaigns).where(eq(schema.campaigns.organizationId, orgId));
+  return row?.value ?? 0;
 }
 
 export async function getCampaignTestimonialCount(campaignId: string): Promise<number> {
-  const sb = createAdminClient();
-  const { count } = await sb
-    .from('testimonials')
-    .select('*', { count: 'exact', head: true })
-    .eq('campaign_id', campaignId);
-  return count ?? 0;
+  const [row] = await db.select({ value: count() }).from(schema.testimonials).where(eq(schema.testimonials.campaignId, campaignId));
+  return row?.value ?? 0;
 }
 
 export async function assertCanCreateCampaign(orgId: string): Promise<{ ok: boolean; reason?: string }> {
   const plan = await getOrgPlan(orgId);
   if (plan === 'pro') return { ok: true };
-  const count = await getOrgCampaignCount(orgId);
-  if (count >= FREE_CAMPAIGN_LIMIT) {
+  const c = await getOrgCampaignCount(orgId);
+  if (c >= FREE_CAMPAIGN_LIMIT) {
     return {
       ok: false,
       reason: `The Free plan is limited to ${FREE_CAMPAIGN_LIMIT} campaign per organization. Upgrade to Pro for unlimited campaigns.`,
@@ -46,19 +39,17 @@ export async function assertCanCreateCampaign(orgId: string): Promise<{ ok: bool
 }
 
 export async function assertCanAcceptTestimonial(campaignId: string): Promise<{ ok: boolean; reason?: string }> {
-  const sb = createAdminClient();
-  const { data: campaign } = await sb
-    .from('campaigns')
-    .select('organization_id')
-    .eq('id', campaignId)
-    .maybeSingle();
+  const [campaign] = await db
+    .select({ organizationId: schema.campaigns.organizationId })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, campaignId));
   if (!campaign) return { ok: false, reason: 'Campaign not found' };
 
-  const plan = await getOrgPlan(campaign.organization_id);
+  const plan = await getOrgPlan(campaign.organizationId);
   if (plan === 'pro') return { ok: true };
 
-  const count = await getCampaignTestimonialCount(campaignId);
-  if (count >= FREE_TESTIMONIAL_LIMIT) {
+  const c = await getCampaignTestimonialCount(campaignId);
+  if (c >= FREE_TESTIMONIAL_LIMIT) {
     return {
       ok: false,
       reason: 'This campaign is currently not accepting new testimonials. Please reach out to the owner.',
@@ -81,7 +72,6 @@ export async function requirePro(userId: string): Promise<boolean> {
   return (org?.plan ?? 'free') === 'pro';
 }
 
-// Compat wrappers for pages that read active org context via user ID
 export async function getProfile(userId: string): Promise<{ plan: Plan; polar_customer_id: string | null }> {
   const org = await getActiveOrg(userId);
   return {

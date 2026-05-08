@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import GoogleAuthButton from '@/components/GoogleAuthButton';
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get('invite');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,19 +20,28 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${location.origin}/auth/callback` },
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
     });
-
-    if (error) {
-      setError(error.message);
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || 'Failed to create account');
       setLoading(false);
-    } else {
-      router.push('/dashboard');
-      router.refresh();
+      return;
     }
+
+    const result = await signIn('credentials', { email, password, redirect: false });
+    if (result?.error) {
+      setError('Account created. Please sign in.');
+      setLoading(false);
+      router.push(invite ? `/login?invite=${invite}` : '/login');
+      return;
+    }
+
+    router.push(invite ? `/invitations/${invite}` : '/dashboard');
+    router.refresh();
   }
 
   return (
@@ -48,7 +58,7 @@ export default function SignupPage() {
           <p className="text-sm text-zinc-400 mt-1">Free for one campaign, upgrade anytime</p>
         </div>
 
-        <GoogleAuthButton label="Sign up with Google" />
+        <GoogleAuthButton label="Sign up with Google" callbackUrl={invite ? `/invitations/${invite}` : '/dashboard'} />
 
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-zinc-200" />
@@ -73,7 +83,7 @@ export default function SignupPage() {
             <input
               type="password"
               required
-              minLength={6}
+              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
@@ -90,11 +100,15 @@ export default function SignupPage() {
 
         <p className="text-sm text-zinc-400 mt-5 text-center">
           Already have an account?{' '}
-          <Link href="/login" className="text-zinc-700 font-medium hover:text-zinc-900 transition-colors">
+          <Link href={invite ? `/login?invite=${invite}` : '/login'} className="text-zinc-700 font-medium hover:text-zinc-900 transition-colors">
             Sign in
           </Link>
         </p>
       </div>
     </div>
   );
+}
+
+export default function SignupPage() {
+  return <Suspense><SignupForm /></Suspense>;
 }

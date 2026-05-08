@@ -1,18 +1,15 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import { getActiveOrg } from '@/lib/org';
 import SettingsClient from './SettingsClient';
 
 export const metadata = { title: 'Settings' };
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const session = await auth();
+  if (!session?.user) redirect('/login');
 
-  const activeOrg = await getActiveOrg(user.id);
+  const activeOrg = await getActiveOrg(session.user.id!);
   const plan = activeOrg?.plan ?? 'free';
 
   return (
@@ -22,7 +19,7 @@ export default async function SettingsPage() {
         <p className="text-sm text-zinc-400 mt-0.5">Account preferences</p>
       </div>
 
-      <SettingsClient email={user.email ?? ''} plan={plan} />
+      <SettingsClient email={session.user.email ?? ''} plan={plan} />
     </div>
   );
 }

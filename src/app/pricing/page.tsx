@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight, Check, Minus } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import { getActiveOrg } from '@/lib/org';
 import MarketingNav from '@/components/marketing/MarketingNav';
 import Footer from '@/components/marketing/Footer';
@@ -9,12 +9,9 @@ import PricingToggle from './PricingToggle';
 export const metadata = { title: 'Pricing' };
 
 export default async function PricingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const loggedIn = !!user;
-  const activeOrg = user ? await getActiveOrg(user.id) : null;
+  const session = await auth();
+  const loggedIn = !!session?.user;
+  const activeOrg = session?.user ? await getActiveOrg(session.user.id!) : null;
   const isPro = activeOrg?.plan === 'pro';
 
   const rows: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
@@ -72,7 +69,7 @@ export default async function PricingPage() {
 
         <div className="mt-12 text-center">
           <Link
-            href={loggedIn ? (isPro ? '/dashboard/billing' : '/dashboard/billing') : '/signup'}
+            href={loggedIn ? '/dashboard/billing' : '/signup'}
             className="inline-flex items-center gap-2 bg-zinc-900 text-white font-medium px-5 py-3 rounded-lg hover:bg-zinc-700 transition-colors"
           >
             {loggedIn ? (isPro ? 'Manage subscription' : 'Upgrade in dashboard') : 'Start free'} <ArrowRight size={14} />

@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import KudosoLogo from '@/components/KudosoLogo';
 
 export default function MarketingNav({ loggedIn }: { loggedIn: boolean }) {
   return (
     <header className="sticky top-0 z-30 backdrop-blur bg-white/70 border-b border-zinc-200/60">
       <nav className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-          </div>
+          <KudosoLogo size={26} />
           <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
         </Link>
 

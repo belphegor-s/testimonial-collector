@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import GoogleAuthButton from '@/components/GoogleAuthButton';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get('invite');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,12 +20,12 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(error.message);
+    const result = await signIn('credentials', { email, password, redirect: false });
+    if (result?.error) {
+      setError('Invalid email or password.');
       setLoading(false);
     } else {
-      router.push('/dashboard');
+      router.push(invite ? `/invitations/${invite}` : '/dashboard');
       router.refresh();
     }
   }
@@ -43,7 +44,7 @@ export default function LoginPage() {
           <p className="text-sm text-zinc-400 mt-1">Sign in to keep collecting proof</p>
         </div>
 
-        <GoogleAuthButton label="Sign in with Google" />
+        <GoogleAuthButton label="Sign in with Google" callbackUrl={invite ? `/invitations/${invite}` : '/dashboard'} />
 
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-zinc-200" />
@@ -73,6 +74,11 @@ export default function LoginPage() {
               className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all"
               placeholder="••••••••"
             />
+            <div className="mt-1.5 text-right">
+              <Link href="/forgot-password" className="text-xs text-zinc-400 hover:text-zinc-700 transition-colors">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {error && <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
@@ -84,11 +90,15 @@ export default function LoginPage() {
 
         <p className="text-sm text-zinc-400 mt-5 text-center">
           No account?{' '}
-          <Link href="/signup" className="text-zinc-700 font-medium hover:text-zinc-900 transition-colors">
+          <Link href={invite ? `/signup?invite=${invite}` : '/signup'} className="text-zinc-700 font-medium hover:text-zinc-900 transition-colors">
             Sign up
           </Link>
         </p>
       </div>
     </div>
   );
+}
+
+export default function LoginPage() {
+  return <Suspense><LoginForm /></Suspense>;
 }

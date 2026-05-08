@@ -1,4 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { eq, isNotNull, and } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,16 +10,16 @@ export async function GET(req: Request) {
   const host = (url.searchParams.get('host') || '').toLowerCase();
   if (!host) return Response.json({ campaignId: null }, { status: 400 });
 
-  const sb = createAdminClient();
-  const { data } = await sb
-    .from('custom_domains')
-    .select('campaign_id, verified_at')
-    .eq('hostname', host)
-    .not('verified_at', 'is', null)
-    .maybeSingle();
+  const [row] = await db
+    .select({ campaignId: schema.customDomains.campaignId })
+    .from(schema.customDomains)
+    .where(and(
+      eq(schema.customDomains.hostname, host),
+      isNotNull(schema.customDomains.verifiedAt),
+    ));
 
   return Response.json(
-    { campaignId: data?.campaign_id ?? null },
+    { campaignId: row?.campaignId ?? null },
     { headers: { 'Cache-Control': 'public, s-maxage=30' } },
   );
 }

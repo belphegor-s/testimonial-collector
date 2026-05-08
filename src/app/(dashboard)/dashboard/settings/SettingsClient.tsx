@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Mail, Shield, KeyRound, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { sendPasswordResetAction, deleteAccountAction } from './actions';
 
@@ -13,6 +14,7 @@ export default function SettingsClient({ email, plan }: { email: string; plan: '
   const [deleting, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+  const reduced = useReducedMotion();
 
   function handleReset() {
     setResetError('');
@@ -79,57 +81,71 @@ export default function SettingsClient({ email, plan }: { email: string; plan: '
           <p className="text-sm font-semibold text-red-700">Danger zone</p>
         </div>
         <div className="p-5">
-          {!showDelete ? (
-            <>
-              <p className="text-sm text-zinc-700 font-medium">Delete account</p>
-              <p className="text-sm text-zinc-500 mt-1 mb-3">
-                Permanently delete your account, all campaigns, testimonials, and custom domains. This cannot be undone.
-              </p>
-              <button
-                onClick={() => setShowDelete(true)}
-                className="text-sm border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
+          <AnimatePresence initial={false} mode="wait">
+            {!showDelete ? (
+              <motion.div
+                key="prompt"
+                initial={reduced ? undefined : { opacity: 0 }}
+                animate={reduced ? undefined : { opacity: 1 }}
+                exit={reduced ? undefined : { opacity: 0 }}
+                transition={{ duration: 0.15 }}
               >
-                Delete my account
-              </button>
-            </>
-          ) : (
-            <div>
-              <p className="text-sm text-red-700 font-medium flex items-center gap-2">
-                <AlertTriangle size={14} /> This is permanent.
-              </p>
-              <p className="text-sm text-zinc-600 mt-2 mb-3">
-                Type <strong className="font-mono">{email}</strong> to confirm.
-              </p>
-              <input
-                type="email"
-                value={confirmInput}
-                onChange={(e) => setConfirmInput(e.target.value)}
-                placeholder={email}
-                className="w-full sm:w-auto sm:min-w-[280px] border border-zinc-200 rounded-lg px-3 py-2 text-sm mb-3"
-              />
-              <div className="flex items-center gap-2">
+                <p className="text-sm text-zinc-700 font-medium">Delete account</p>
+                <p className="text-sm text-zinc-500 mt-1 mb-3">
+                  Permanently delete your account, all campaigns, testimonials, and custom domains. This cannot be undone.
+                </p>
                 <button
-                  onClick={handleDelete}
-                  disabled={deleting || confirmInput !== email}
-                  className="text-sm bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+                  onClick={() => setShowDelete(true)}
+                  className="text-sm border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
                 >
-                  {deleting ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Delete forever
+                  Delete my account
                 </button>
-                <button
-                  onClick={() => {
-                    setShowDelete(false);
-                    setConfirmInput('');
-                    setDeleteError('');
-                  }}
-                  className="text-sm text-zinc-500 px-3 py-2 hover:text-zinc-900"
-                >
-                  Cancel
-                </button>
-              </div>
-              {deleteError && <p className="text-xs text-red-500 mt-2">{deleteError}</p>}
-            </div>
-          )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="form"
+                initial={reduced ? undefined : { opacity: 0, y: 6 }}
+                animate={reduced ? undefined : { opacity: 1, y: 0 }}
+                exit={reduced ? undefined : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+              >
+                <p className="text-sm text-red-700 font-medium flex items-center gap-2">
+                  <AlertTriangle size={14} /> This is permanent.
+                </p>
+                <p className="text-sm text-zinc-600 mt-2 mb-3">
+                  Type <strong className="font-mono">{email}</strong> to confirm.
+                </p>
+                <input
+                  type="email"
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  placeholder={email}
+                  className="w-full sm:w-auto sm:min-w-[280px] border border-zinc-200 rounded-lg px-3 py-2 text-sm mb-3"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting || confirmInput !== email}
+                    className="text-sm bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2"
+                  >
+                    {deleting ? <Loader2 size={14} className="animate-spin" /> : null}
+                    Delete forever
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowDelete(false);
+                      setConfirmInput('');
+                      setDeleteError('');
+                    }}
+                    className="text-sm text-zinc-500 px-3 py-2 hover:text-zinc-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {deleteError && <p className="text-xs text-red-500 mt-2">{deleteError}</p>}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

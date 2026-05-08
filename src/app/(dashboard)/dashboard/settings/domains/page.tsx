@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/auth';
+import { eq, desc } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { getActiveOrg } from '@/lib/org';
 import { Globe, Lock, Sparkles } from 'lucide-react';
 import DomainsClient from './DomainsClient';
@@ -9,19 +11,32 @@ import DomainsClient from './DomainsClient';
 export const metadata = { title: 'Domains' };
 
 export default async function DomainsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const session = await auth();
+  if (!session?.user) redirect('/login');
 
-  const activeOrg = await getActiveOrg(user.id);
+  const activeOrg = await getActiveOrg(session.user.id!);
   if (!activeOrg) redirect('/login');
   const plan = activeOrg.plan;
 
-  const sb = createAdminClient();
-  const { data: campaigns } = await sb.from('campaigns').select('id, name').eq('organization_id', activeOrg.id).order('created_at', { ascending: false });
-  const { data: domains } = await sb.from('custom_domains').select('*').eq('organization_id', activeOrg.id).order('created_at', { ascending: false });
+  const [campaigns, domains] = await Promise.all([
+    db.select({ id: schema.campaigns.id, name: schema.campaigns.name })
+      .from(schema.campaigns)
+      .where(eq(schema.campaigns.organizationId, activeOrg.id))
+      .orderBy(desc(schema.campaigns.createdAt)),
+    db.select().from(schema.customDomains)
+      .where(eq(schema.customDomains.organizationId, activeOrg.id))
+      .orderBy(desc(schema.customDomains.createdAt)),
+  ]);
+
+  const normalizedDomains = domains.map((d) => ({
+    id: d.id,
+    organization_id: d.organizationId,
+    campaign_id: d.campaignId,
+    hostname: d.hostname,
+    verification_token: d.verificationToken,
+    verified_at: d.verifiedAt?.toISOString() ?? null,
+    created_at: d.createdAt.toISOString(),
+  }));
 
   return (
     <div className="space-y-6">
@@ -33,13 +48,7 @@ export default async function DomainsPage() {
           </h1>
           <p className="text-sm text-zinc-400 mt-0.5">Serve a campaign on your own domain (e.g. reviews.acme.com)</p>
         </div>
-        <span
-          className={
-            plan === 'pro'
-              ? 'text-[11px] font-medium px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide'
-              : 'text-[11px] font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-600 uppercase tracking-wide'
-          }
-        >
+        <span className={plan === 'pro' ? 'text-[11px] font-medium px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide' : 'text-[11px] font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-600 uppercase tracking-wide'}>
           Pro feature
         </span>
       </div>
@@ -53,16 +62,13 @@ export default async function DomainsPage() {
           <p className="text-sm text-zinc-500 mt-1 mb-5 max-w-sm mx-auto">
             Bring your own domain (e.g. <code className="text-zinc-700 bg-zinc-100 px-1 py-0.5 rounded text-xs">reviews.yourbrand.com</code>) and serve testimonial collection forms with full SSL.
           </p>
-          <Link
-            href="/dashboard/billing"
-            className="inline-flex items-center gap-2 bg-zinc-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-700 transition-colors"
-          >
+          <Link href="/dashboard/billing" className="inline-flex items-center gap-2 bg-zinc-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-zinc-700 transition-colors">
             <Sparkles size={14} />
             Upgrade to Pro
           </Link>
         </div>
       ) : (
-        <DomainsClient campaigns={campaigns ?? []} domains={domains ?? []} />
+        <DomainsClient campaigns={campaigns} domains={normalizedDomains} />
       )}
     </div>
   );

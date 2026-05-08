@@ -1,14 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import CampaignForm from '@/components/CampaignForm';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
 export default function CampaignSettingsPage({ params }: { params: Promise<{ id: string }> }) {
-  const supabase = createClient();
-
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -18,17 +15,17 @@ export default function CampaignSettingsPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     params.then(async ({ id }) => {
       setCampaignId(id);
-
-      const { data } = await supabase.from('campaigns').select('*').eq('id', id).single();
-
-      if (data) setData(data);
+      const res = await fetch(`/api/campaigns/${id}`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      }
       setLoading(false);
     });
   }, []);
 
   async function handleSave(formData: any) {
     if (!campaignId) return;
-
     setSaving(true);
     setError('');
 
@@ -48,21 +45,23 @@ export default function CampaignSettingsPage({ params }: { params: Promise<{ id:
         finalLogoUrl = url;
       }
 
-      if (formData.removeLogo) {
-        finalLogoUrl = null;
-      }
+      if (formData.removeLogo) finalLogoUrl = null;
 
-      const { error } = await supabase
-        .from('campaigns')
-        .update({
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: formData.name,
           brand_color: formData.brandColor,
           thank_you_message: formData.thankYouMessage,
           logo_url: finalLogoUrl,
-        })
-        .eq('id', campaignId);
+        }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error ?? 'Failed to save');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

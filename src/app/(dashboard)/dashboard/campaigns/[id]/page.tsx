@@ -1,5 +1,7 @@
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/auth';
+import { eq, count, and } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
@@ -10,45 +12,34 @@ import { canAccessCampaign } from '@/lib/org';
 
 export default async function CampaignPage({ params }: { params: { id: string } }) {
   const { id } = await params;
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) notFound();
+  const session = await auth();
+  if (!session?.user) notFound();
 
-  const access = await canAccessCampaign(user.id, id);
+  const access = await canAccessCampaign(session.user.id!, id);
   if (!access.ok) notFound();
 
-  const supabase = createAdminClient();
-  const { data: campaign } = await supabase.from('campaigns').select('*').eq('id', id).single();
+  const [campaign] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, id));
   if (!campaign) notFound();
 
-  // Fetch initial page of testimonials (page 1, 20 items)
-  const { data: initialData, count: totalCount } = await supabase
-    .from('testimonials')
-    .select('*', { count: 'exact' })
-    .eq('campaign_id', campaign.id)
-    .order('created_at', { ascending: false })
-    .range(0, 19);
+  const initialData = await db
+    .select()
+    .from(schema.testimonials)
+    .where(eq(schema.testimonials.campaignId, campaign.id))
+    .orderBy(schema.testimonials.createdAt)
+    .limit(20);
 
-  // Fetch stats
-  const { count: approvedCount } = await supabase
-    .from('testimonials')
-    .select('*', { count: 'exact', head: true })
-    .eq('campaign_id', campaign.id)
-    .eq('approved', true);
+  const [[totalRow], [approvedRow], [videoRow]] = await Promise.all([
+    db.select({ value: count() }).from(schema.testimonials).where(eq(schema.testimonials.campaignId, campaign.id)),
+    db.select({ value: count() }).from(schema.testimonials).where(and(eq(schema.testimonials.campaignId, campaign.id), eq(schema.testimonials.approved, true))),
+    db.select({ value: count() }).from(schema.testimonials).where(and(eq(schema.testimonials.campaignId, campaign.id), eq(schema.testimonials.contentType, 'video'))),
+  ]);
 
-  const { count: videoCount } = await supabase
-    .from('testimonials')
-    .select('*', { count: 'exact', head: true })
-    .eq('campaign_id', campaign.id)
-    .eq('content_type', 'video');
-
-  const total = totalCount ?? 0;
-  const approved = approvedCount ?? 0;
+  const total = totalRow?.value ?? 0;
+  const approved = approvedRow?.value ?? 0;
   const pending = total - approved;
-  const video = videoCount ?? 0;
+  const video = videoRow?.value ?? 0;
 
-  // Calculate avg rating from initial batch (good enough for display)
-  const allRatings = (initialData ?? []).filter((t) => t.rating > 0);
+  const allRatings = initialData.filter((t) => t.rating > 0);
   const avgRating = allRatings.length > 0
     ? (allRatings.reduce((s, t) => s + t.rating, 0) / allRatings.length).toFixed(1)
     : '0';
@@ -56,17 +47,43 @@ export default async function CampaignPage({ params }: { params: { id: string } 
   const collectionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/collect/${campaign.id}`;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
 
+  // Normalize to match existing component expectations
+  const campaignData = {
+    id: campaign.id,
+    name: campaign.name,
+    brand_color: campaign.brandColor,
+    thank_you_message: campaign.thankYouMessage,
+    logo_url: campaign.logoUrl,
+    organization_id: campaign.organizationId,
+    form_schema: campaign.formSchema,
+    created_at: campaign.createdAt.toISOString(),
+  };
+
+  const normalizedTestimonials = initialData.map((t) => ({
+    id: t.id,
+    campaign_id: t.campaignId,
+    customer_name: t.customerName,
+    customer_title: t.customerTitle,
+    content_type: t.contentType,
+    text_content: t.textContent,
+    video_url: t.videoUrl,
+    rating: t.rating,
+    approved: t.approved,
+    ai_summary: t.aiSummary,
+    form_data: t.formData,
+    created_at: t.createdAt.toISOString(),
+  }));
+
   return (
     <div>
-      {/* Header */}
       <div className="mb-6">
         <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-2">
           <ArrowLeft size={14} /> Back
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3 mt-3">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: campaign.brand_color + '22' }}>
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: campaign.brand_color }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: (campaign.brandColor ?? '#18181b') + '22' }}>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: campaign.brandColor ?? '#18181b' }} />
             </div>
             <h1 className="text-lg font-semibold text-zinc-900">{campaign.name}</h1>
             <Link
@@ -85,7 +102,6 @@ export default async function CampaignPage({ params }: { params: { id: string } 
         </div>
       </div>
 
-      {/* Collection link */}
       <div className="bg-white border border-zinc-200 rounded-xl p-5 mb-6">
         <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Collection link</p>
         <div className="flex items-center gap-2">
@@ -97,10 +113,9 @@ export default async function CampaignPage({ params }: { params: { id: string } 
 
       <SendRequestForm campaignId={campaign.id} />
 
-      {/* Client dashboard */}
       <CampaignDashboardClient
-        campaign={campaign}
-        initialData={initialData ?? []}
+        campaign={campaignData}
+        initialData={normalizedTestimonials}
         initialTotal={total}
         stats={{ total, approved, pending, video, avgRating }}
         appUrl={appUrl}

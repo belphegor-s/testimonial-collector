@@ -1,48 +1,47 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
+import { eq, isNotNull, desc } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { checkAiAccess, deductAiCredit } from '@/lib/ai';
 
 const anthropic = new Anthropic();
 
 export async function POST(req: Request) {
-  const authClient = await createClient();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { campaignId, force } = await req.json();
 
-  const aiAccess = await checkAiAccess(user.id, campaignId);
+  const aiAccess = await checkAiAccess(session.user.id!, campaignId);
   if (!aiAccess.ok) return Response.json({ error: aiAccess.reason }, { status: 402 });
 
-  const supabase = createAdminClient();
+  const allTestimonials = await db
+    .select({ id: schema.testimonials.id, customerName: schema.testimonials.customerName, textContent: schema.testimonials.textContent, rating: schema.testimonials.rating, contentType: schema.testimonials.contentType, createdAt: schema.testimonials.createdAt })
+    .from(schema.testimonials)
+    .where(eq(schema.testimonials.campaignId, campaignId))
+    .orderBy(desc(schema.testimonials.createdAt));
 
-  // Fetch testimonials with text content
-  const { data: testimonials } = await supabase
-    .from('testimonials')
-    .select('id, customer_name, text_content, rating, content_type, created_at')
-    .eq('campaign_id', campaignId)
-    .not('text_content', 'is', null)
-    .order('created_at', { ascending: false });
-
-  const textTestimonials = (testimonials ?? []).filter((t) => t.text_content?.trim());
+  const textTestimonials = allTestimonials.filter((t) => t.textContent?.trim());
 
   if (!textTestimonials.length) {
     return Response.json({ sentiments: [], aggregate: null, cached: false });
   }
 
-  // Check cache unless force rerun
   if (!force) {
-    const { data: cachedAggregate } = await supabase.from('sentiment_aggregate').select('*').eq('campaign_id', campaignId).single();
+    const [cachedAggregate] = await db
+      .select()
+      .from(schema.sentimentAggregate)
+      .where(eq(schema.sentimentAggregate.campaignId, campaignId));
 
-    if (cachedAggregate && cachedAggregate.analyzed_count >= textTestimonials.length) {
-      // Cache is up to date — return cached results
-      const { data: cachedSentiments } = await supabase.from('sentiment_cache').select('*').eq('campaign_id', campaignId);
+    if (cachedAggregate && cachedAggregate.analyzedCount >= textTestimonials.length) {
+      const cachedSentiments = await db
+        .select()
+        .from(schema.sentimentCache)
+        .where(eq(schema.sentimentCache.campaignId, campaignId));
 
-      const sentiments = (cachedSentiments ?? []).map((s) => ({
-        testimonialId: s.testimonial_id,
+      const sentiments = cachedSentiments.map((s) => ({
+        testimonialId: s.testimonialId,
         sentiment: s.sentiment,
         score: s.score,
         keywords: s.keywords ?? [],
@@ -52,11 +51,11 @@ export async function POST(req: Request) {
       return Response.json({
         sentiments,
         aggregate: {
-          overall_sentiment: cachedAggregate.overall_sentiment,
-          avg_score: cachedAggregate.avg_score,
-          top_themes: cachedAggregate.top_themes ?? [],
-          top_praise: cachedAggregate.top_praise ?? [],
-          top_concerns: cachedAggregate.top_concerns ?? [],
+          overall_sentiment: cachedAggregate.overallSentiment,
+          avg_score: cachedAggregate.avgScore,
+          top_themes: cachedAggregate.topThemes ?? [],
+          top_praise: cachedAggregate.topPraise ?? [],
+          top_concerns: cachedAggregate.topConcerns ?? [],
           summary: cachedAggregate.summary,
         },
         cached: true,
@@ -64,17 +63,15 @@ export async function POST(req: Request) {
     }
   }
 
-  // Fresh analysis
   const analysisSlice = textTestimonials.slice(0, 30);
-  const textsForAnalysis = analysisSlice.map((t, i) => `[${i}] (by ${t.customer_name}, rating: ${t.rating}/5): "${t.text_content}"`).join('\n\n');
+  const textsForAnalysis = analysisSlice.map((t, i) => `[${i}] (by ${t.customerName}, rating: ${t.rating}/5): "${t.textContent}"`).join('\n\n');
 
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
-    messages: [
-      {
-        role: 'user',
-        content: `Analyze the sentiment of these customer testimonials. For each one, provide a sentiment label and score. Also provide an aggregate analysis.
+    messages: [{
+      role: 'user',
+      content: `Analyze the sentiment of these customer testimonials. For each one, provide a sentiment label and score. Also provide an aggregate analysis.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -93,8 +90,7 @@ Return ONLY valid JSON in this exact format:
 
 Testimonials:
 ${textsForAnalysis}`,
-      },
-    ],
+    }],
   });
 
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
@@ -103,7 +99,6 @@ ${textsForAnalysis}`,
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { items: [], aggregate: null };
 
-    // Map results to testimonial IDs
     const sentiments = (analysis.items || []).map((item: any) => ({
       testimonialId: analysisSlice[item.index]?.id,
       sentiment: item.sentiment,
@@ -112,48 +107,39 @@ ${textsForAnalysis}`,
       emotion: item.emotion,
     }));
 
-    // Persist to DB — upsert sentiment_cache per testimonial
     for (const s of sentiments) {
       if (!s.testimonialId) continue;
-      await supabase.from('sentiment_cache').upsert(
-        {
-          campaign_id: campaignId,
-          testimonial_id: s.testimonialId,
-          sentiment: s.sentiment,
-          score: s.score,
-          keywords: s.keywords,
-          emotion: s.emotion,
-        },
-        { onConflict: 'testimonial_id' },
-      );
+      await db.insert(schema.sentimentCache).values({
+        campaignId,
+        testimonialId: s.testimonialId,
+        sentiment: s.sentiment,
+        score: s.score,
+        keywords: s.keywords,
+        emotion: s.emotion,
+      }).onConflictDoUpdate({ target: schema.sentimentCache.testimonialId, set: { sentiment: s.sentiment, score: s.score, keywords: s.keywords, emotion: s.emotion } });
     }
 
-    // Persist aggregate
     const agg = analysis.aggregate;
     if (agg) {
-      await supabase.from('sentiment_aggregate').upsert(
-        {
-          campaign_id: campaignId,
-          overall_sentiment: agg.overall_sentiment,
-          avg_score: agg.avg_score,
-          top_themes: agg.top_themes || [],
-          top_praise: agg.top_praise || [],
-          top_concerns: agg.top_concerns || [],
-          summary: agg.summary,
-          analyzed_count: textTestimonials.length,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'campaign_id' },
-      );
+      await db.insert(schema.sentimentAggregate).values({
+        campaignId,
+        overallSentiment: agg.overall_sentiment,
+        avgScore: agg.avg_score,
+        topThemes: agg.top_themes || [],
+        topPraise: agg.top_praise || [],
+        topConcerns: agg.top_concerns || [],
+        summary: agg.summary,
+        analyzedCount: textTestimonials.length,
+        updatedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: schema.sentimentAggregate.campaignId,
+        set: { overallSentiment: agg.overall_sentiment, avgScore: agg.avg_score, topThemes: agg.top_themes || [], topPraise: agg.top_praise || [], topConcerns: agg.top_concerns || [], summary: agg.summary, analyzedCount: textTestimonials.length, updatedAt: new Date() },
+      });
     }
 
     await deductAiCredit(aiAccess.orgId!, 'sentiment', campaignId);
 
-    return Response.json({
-      sentiments,
-      aggregate: agg || null,
-      cached: false,
-    });
+    return Response.json({ sentiments, aggregate: agg || null, cached: false });
   } catch {
     return Response.json({ sentiments: [], aggregate: null, cached: false });
   }

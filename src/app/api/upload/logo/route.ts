@@ -1,15 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/auth';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { canAccessCampaign } from '@/lib/org';
 import { uploadToR2 } from '@/lib/cloudflare-r2';
 
 const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml', 'image/gif'];
-const MAX_LOGO_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_LOGO_SIZE = 2 * 1024 * 1024;
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const form = await req.formData();
   const file = form.get('file') as File | null;
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Invalid file type. Allowed: jpeg, png, webp, svg, gif.' }, { status: 400 });
   }
 
-  const access = await canAccessCampaign(user.id, campaignId);
+  const access = await canAccessCampaign(session.user.id!, campaignId);
   if (!access.ok) return Response.json({ error: 'Campaign not found' }, { status: 404 });
 
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
@@ -36,8 +37,7 @@ export async function POST(req: Request) {
 
   const url = await uploadToR2(key, buffer, file.type);
 
-  const sb = createAdminClient();
-  await sb.from('campaigns').update({ logo_url: url }).eq('id', campaignId);
+  await db.update(schema.campaigns).set({ logoUrl: url }).where(eq(schema.campaigns.id, campaignId));
 
   return Response.json({ url });
 }

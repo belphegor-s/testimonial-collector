@@ -512,3 +512,106 @@ create policy "custom_domains_delete_own" on public.custom_domains
         and m.role in ('owner', 'admin')
     )
   );
+
+-- ── 0007_fix_rls_recursion ────────────────────────────────────
+create or replace function public.is_org_member(org_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.organization_members
+    where organization_id = org_id
+      and user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_org_admin(org_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.organization_members
+    where organization_id = org_id
+      and user_id = auth.uid()
+      and role in ('owner', 'admin')
+  );
+$$;
+
+drop policy if exists "organization_members_select" on public.organization_members;
+create policy "organization_members_select" on public.organization_members
+  for select using (public.is_org_member(organization_id));
+
+drop policy if exists "organization_members_admin_write" on public.organization_members;
+create policy "organization_members_admin_write" on public.organization_members
+  for all using (public.is_org_admin(organization_id));
+
+drop policy if exists "organizations_select_member" on public.organizations;
+create policy "organizations_select_member" on public.organizations
+  for select using (public.is_org_member(id));
+
+drop policy if exists "invitations_select_member" on public.organization_invitations;
+create policy "invitations_select_member" on public.organization_invitations
+  for select using (public.is_org_member(organization_id));
+
+drop policy if exists "invitations_admin_write" on public.organization_invitations;
+create policy "invitations_admin_write" on public.organization_invitations
+  for all using (public.is_org_admin(organization_id));
+
+drop policy if exists "campaigns_select_member" on public.campaigns;
+create policy "campaigns_select_member" on public.campaigns
+  for select using (public.is_org_member(organization_id));
+
+drop policy if exists "campaigns_admin_write" on public.campaigns;
+create policy "campaigns_admin_write" on public.campaigns
+  for all using (public.is_org_member(organization_id));
+
+drop policy if exists "ledger_select_member" on public.ai_credit_ledger;
+create policy "ledger_select_member" on public.ai_credit_ledger
+  for select using (public.is_org_member(organization_id));
+
+drop policy if exists "custom_domains_select_member" on public.custom_domains;
+create policy "custom_domains_select_member" on public.custom_domains
+  for select using (public.is_org_member(organization_id));
+
+drop policy if exists "custom_domains_admin_write" on public.custom_domains;
+create policy "custom_domains_admin_write" on public.custom_domains
+  for all using (public.is_org_admin(organization_id));
+
+-- ── 0008_schema_cleanup ───────────────────────────────────────
+-- (email already dropped below in 0009; kept here as no-op for completeness)
+alter table public.custom_domains alter column user_id drop not null;
+
+-- ── 0009_remove_stale_columns ─────────────────────────────────
+alter table public.profiles drop column if exists email;
+alter table public.profiles drop column if exists plan;
+alter table public.profiles drop column if exists polar_customer_id;
+alter table public.profiles drop column if exists polar_subscription_id;
+alter table public.profiles drop column if exists plan_renews_at;
+
+drop index if exists public.profiles_polar_customer_id_idx;
+drop index if exists public.profiles_polar_subscription_id_idx;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id)
+  values (new.id)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+alter table public.campaigns drop column if exists owner_id;
+
+drop index if exists public.custom_domains_user_id_idx;
+alter table public.custom_domains drop column if exists user_id;

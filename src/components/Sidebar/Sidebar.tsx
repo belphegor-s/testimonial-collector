@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
+import KudosoLogo from '@/components/KudosoLogo';
 import {
   LayoutDashboard,
   CreditCard,
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { createClient } from '@/lib/supabase/client';
+import { signOut } from 'next-auth/react';
 import type { ActiveOrg } from '@/lib/org';
 import { setActiveOrg } from '@/app/(dashboard)/dashboard/actions';
 
@@ -51,7 +52,6 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -78,9 +78,7 @@ export default function Sidebar({
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+    await signOut({ callbackUrl: '/login' });
   }
 
   return (
@@ -97,11 +95,13 @@ export default function Sidebar({
             collapsed ? 'justify-center' : 'justify-between gap-2',
           )}
         >
-          {!collapsed && (
-            <Link href="/" className="flex items-center gap-2 min-w-0 px-2">
-              <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center shrink-0">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              </div>
+          {collapsed ? (
+            <Link href="/" className="shrink-0" aria-label="Kudoso home">
+              <KudosoLogo size={26} />
+            </Link>
+          ) : (
+            <Link href="/" className="flex items-center gap-2 min-w-0 px-1">
+              <KudosoLogo size={26} className="shrink-0" />
               <span className="text-sm font-semibold text-zinc-900 tracking-tight truncate">kudoso</span>
             </Link>
           )}
@@ -152,9 +152,7 @@ export default function Sidebar({
 
       <div className="md:hidden sticky top-0 z-30 flex items-center justify-between bg-white border-b border-zinc-200 px-4 h-12">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          </div>
+          <KudosoLogo size={24} />
           <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
         </Link>
         <button
@@ -185,9 +183,7 @@ export default function Sidebar({
             >
               <div className="flex items-center justify-between px-4 h-12 border-b border-zinc-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  </div>
+                  <KudosoLogo size={24} />
                   <span className="text-sm font-semibold text-zinc-900 tracking-tight">kudoso</span>
                 </div>
                 <button

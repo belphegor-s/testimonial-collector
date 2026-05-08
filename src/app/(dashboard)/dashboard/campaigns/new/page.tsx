@@ -1,19 +1,16 @@
 import Link from 'next/link';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import { assertCanCreateCampaign, FREE_CAMPAIGN_LIMIT, getOrgCampaignCount, getOrgPlan } from '@/lib/plan';
 import { getActiveOrg } from '@/lib/org';
 import NewCampaignForm from './NewCampaignForm';
 
 export default async function NewCampaignPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const session = await auth();
+  if (!session?.user) redirect('/login');
 
-  const activeOrg = await getActiveOrg(user.id);
+  const activeOrg = await getActiveOrg(session.user.id!);
   if (!activeOrg) redirect('/login');
 
   const plan = await getOrgPlan(activeOrg.id);

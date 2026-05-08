@@ -1,23 +1,22 @@
-import { createAdminClient } from '@/lib/supabase/admin';
+import { sql } from 'drizzle-orm';
+import { db } from '@/lib/db';
 
 export async function rateLimit(
   key: string,
   limit: number,
-  windowSec: number
+  windowSec: number,
 ): Promise<{ ok: boolean; remaining: number }> {
-  const sb = createAdminClient();
-  const windowStart = new Date(Date.now() - windowSec * 1000).toISOString();
+  const windowStart = new Date(Date.now() - windowSec * 1000);
 
-  const { data, error } = await sb.rpc('upsert_rate_limit', {
-    p_key: key,
-    p_window_start: windowStart,
-    p_limit: limit,
-  });
-
-  if (error) {
-    console.error('rate limit error', error);
+  try {
+    const result = await db.execute<{ ok: boolean; remaining: number }>(
+      sql`SELECT * FROM public.upsert_rate_limit(${key}, ${windowStart.toISOString()}::timestamptz, ${limit})`
+    );
+    const row = (result.rows ?? [])[0] as any;
+    if (!row) return { ok: true, remaining: limit };
+    return { ok: Boolean(row.ok), remaining: Number(row.remaining) };
+  } catch (err) {
+    console.error('rate limit error', err);
     return { ok: true, remaining: limit };
   }
-
-  return { ok: data.ok, remaining: data.remaining };
 }

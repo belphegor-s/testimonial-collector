@@ -9,9 +9,9 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "connect-src 'self' *.supabase.co wss://*.supabase.co https://api.polar.sh",
-      "img-src 'self' data: blob: *.supabase.co",
-      "media-src 'self' blob: *.supabase.co",
+      "connect-src 'self' https://api.polar.sh",
+      "img-src 'self' data: blob:",
+      "media-src 'self' blob:",
       "frame-ancestors 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
@@ -25,9 +25,6 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   turbopack: {
     root: __dirname,
-  },
-  images: {
-    remotePatterns: [new URL('https://urizlqjfhsekknbzzric.supabase.co/storage/**')],
   },
   compiler: {
     removeConsole: { exclude: ['error'] },

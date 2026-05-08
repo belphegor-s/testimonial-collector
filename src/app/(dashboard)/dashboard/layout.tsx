@@ -1,21 +1,18 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import Sidebar from '@/components/Sidebar/Sidebar';
 import { getActiveOrg, listMyOrgs } from '@/lib/org';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
+  if (!session?.user) redirect('/login');
 
-  if (!user) redirect('/login');
-
-  const orgs = await listMyOrgs(user.id);
-  const activeOrg = await getActiveOrg(user.id);
+  const userId = session.user.id!;
+  const orgs = await listMyOrgs(userId);
+  const activeOrg = await getActiveOrg(userId);
 
   return (
-    <Sidebar userEmail={user.email ?? ''} orgs={orgs} activeOrg={activeOrg}>
+    <Sidebar userEmail={session.user.email ?? ''} orgs={orgs} activeOrg={activeOrg}>
       {children}
     </Sidebar>
   );

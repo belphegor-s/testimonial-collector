@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Loader2, Trash2, UserPlus, Shield, User, Crown } from 'lucide-react';
 import { inviteMember, revokeInvitation, removeMember, updateMemberRole } from './actions';
+import Modal from '@/components/Modal';
 
 type Member = {
   userId: string;
@@ -35,6 +37,13 @@ export default function TeamClient({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [, startTransition] = useTransition();
+  const [removeBusy, startRemoveTrans] = useTransition();
+  const [pendingRemove, setPendingRemove] = useState<{
+    type: 'member' | 'invite';
+    id: string;
+    label: string;
+  } | null>(null);
+  const reduced = useReducedMotion();
 
   const canManage = currentUserRole === 'owner' || currentUserRole === 'admin';
 
@@ -53,6 +62,21 @@ export default function TeamClient({
     });
   }
 
+  function handleConfirmRemove() {
+    if (!pendingRemove) return;
+    if (pendingRemove.type === 'member') {
+      startRemoveTrans(async () => {
+        await removeMember(orgId, pendingRemove.id);
+        setPendingRemove(null);
+      });
+    } else {
+      startRemoveTrans(async () => {
+        await revokeInvitation(pendingRemove.id);
+        setPendingRemove(null);
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Members list */}
@@ -61,13 +85,22 @@ export default function TeamClient({
           <h2 className="text-sm font-semibold text-zinc-900">{members.length} member{members.length !== 1 ? 's' : ''}</h2>
         </div>
         <div className="divide-y divide-zinc-100">
-          {members.map((m) => (
-            <div key={m.userId} className="px-5 py-3 flex items-center gap-3">
+          {members.map((m, i) => (
+            <motion.div
+              key={m.userId}
+              initial={reduced ? undefined : { opacity: 0, x: -8 }}
+              animate={reduced ? undefined : { opacity: 1, x: 0 }}
+              transition={reduced ? undefined : { delay: i * 0.04, duration: 0.2 }}
+              className="px-5 py-3 flex items-center gap-3"
+            >
               <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
                 <span className="text-xs font-semibold text-zinc-600">{m.email[0].toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-zinc-900 truncate">{m.email}{m.isCurrentUser && <span className="text-xs text-zinc-400 ml-2">(you)</span>}</p>
+                <p className="text-sm text-zinc-900 truncate">
+                  {m.email}
+                  {m.isCurrentUser && <span className="text-xs text-zinc-400 ml-2">(you)</span>}
+                </p>
                 <p className="text-xs text-zinc-400 capitalize">{m.role}</p>
               </div>
               <RoleBadge role={m.role} />
@@ -88,11 +121,7 @@ export default function TeamClient({
                     </select>
                   )}
                   <button
-                    onClick={() => {
-                      if (confirm(`Remove ${m.email} from this organization?`)) {
-                        startTransition(() => removeMember(orgId, m.userId));
-                      }
-                    }}
+                    onClick={() => setPendingRemove({ type: 'member', id: m.userId, label: m.email })}
                     className="p-1.5 text-zinc-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
                     title="Remove member"
                   >
@@ -100,7 +129,7 @@ export default function TeamClient({
                   </button>
                 </div>
               )}
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -117,15 +146,13 @@ export default function TeamClient({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-zinc-900 truncate">{inv.email}</p>
                   <p className="text-xs text-zinc-400 capitalize">
-                    {inv.role} - expires {new Date(inv.expiresAt).toLocaleDateString()}
+                    {inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}
                   </p>
                 </div>
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide">Pending</span>
                 {canManage && (
                   <button
-                    onClick={() => {
-                      startTransition(() => revokeInvitation(inv.id));
-                    }}
+                    onClick={() => setPendingRemove({ type: 'invite', id: inv.id, label: inv.email })}
                     className="p-1.5 text-zinc-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
                     title="Revoke invitation"
                   >
@@ -177,21 +204,37 @@ export default function TeamClient({
           </p>
         </div>
       )}
+
+      <Modal
+        open={!!pendingRemove}
+        onClose={() => setPendingRemove(null)}
+        title={pendingRemove?.type === 'member' ? `Remove ${pendingRemove.label}?` : `Revoke invitation for ${pendingRemove?.label}?`}
+        description={
+          pendingRemove?.type === 'member'
+            ? 'This member will lose access to the organization immediately.'
+            : 'The invitation link will be invalidated and they will need to be re-invited.'
+        }
+        confirmLabel={pendingRemove?.type === 'member' ? 'Remove member' : 'Revoke invitation'}
+        onConfirm={handleConfirmRemove}
+        busy={removeBusy}
+      />
     </div>
   );
 }
 
 function RoleBadge({ role }: { role: 'owner' | 'admin' | 'member' }) {
-  if (role === 'owner') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-900 text-white uppercase tracking-wide">
-      <Crown size={9} /> Owner
-    </span>
-  );
-  if (role === 'admin') return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 uppercase tracking-wide">
-      <Shield size={9} /> Admin
-    </span>
-  );
+  if (role === 'owner')
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-900 text-white uppercase tracking-wide">
+        <Crown size={9} /> Owner
+      </span>
+    );
+  if (role === 'admin')
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 uppercase tracking-wide">
+        <Shield size={9} /> Admin
+      </span>
+    );
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-50 text-zinc-500 uppercase tracking-wide">
       <User size={9} /> Member

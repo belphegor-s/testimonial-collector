@@ -3,27 +3,26 @@
 import { randomBytes } from 'crypto';
 import { promises as dns } from 'dns';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { eq, count } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+import { auth } from '@/auth';
 import { getActiveOrg } from '@/lib/org';
 
 const MAX_DOMAINS_PER_ORG = 5;
 const HOSTNAME_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/i;
 
 async function authedProOrg() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  const org = await getActiveOrg(user.id);
+  const session = await auth();
+  if (!session?.user) throw new Error('Not authenticated');
+  const org = await getActiveOrg(session.user.id!);
   if (!org) throw new Error('No active organization');
   if (org.plan !== 'pro') throw new Error('Custom domains require the Pro plan.');
-  return { user, org };
+  return { user: session.user, org };
 }
 
 export async function addDomainAction(formData: FormData) {
-  const { user, org } = await authedProOrg();
+  const { org } = await authedProOrg();
   const hostnameRaw = String(formData.get('hostname') || '').trim().toLowerCase();
   const campaignId = String(formData.get('campaignId') || '').trim();
 
@@ -35,28 +34,37 @@ export async function addDomainAction(formData: FormData) {
   }
   if (!campaignId) return { ok: false, error: 'Choose a campaign.' };
 
-  const sb = createAdminClient();
-
-  const { data: campaign } = await sb.from('campaigns').select('id').eq('id', campaignId).eq('organization_id', org.id).maybeSingle();
+  const [campaign] = await db
+    .select({ id: schema.campaigns.id })
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.id, campaignId));
   if (!campaign) return { ok: false, error: 'Campaign not found.' };
 
-  const { count } = await sb.from('custom_domains').select('*', { count: 'exact', head: true }).eq('organization_id', org.id);
-  if ((count ?? 0) >= MAX_DOMAINS_PER_ORG) {
+  const [countRow] = await db
+    .select({ value: count() })
+    .from(schema.customDomains)
+    .where(eq(schema.customDomains.organizationId, org.id));
+  if ((countRow?.value ?? 0) >= MAX_DOMAINS_PER_ORG) {
     return { ok: false, error: `You can add up to ${MAX_DOMAINS_PER_ORG} custom domains. Remove one first.` };
   }
 
-  const { data: existing } = await sb.from('custom_domains').select('id').eq('hostname', hostnameRaw).maybeSingle();
+  const [existing] = await db
+    .select({ id: schema.customDomains.id })
+    .from(schema.customDomains)
+    .where(eq(schema.customDomains.hostname, hostnameRaw));
   if (existing) return { ok: false, error: 'That hostname is already in use.' };
 
   const verification_token = randomBytes(16).toString('hex');
-  const { error } = await sb.from('custom_domains').insert({
-    organization_id: org.id,
-    user_id: user.id,
-    campaign_id: campaignId,
-    hostname: hostnameRaw,
-    verification_token,
-  });
-  if (error) return { ok: false, error: error.message };
+  try {
+    await db.insert(schema.customDomains).values({
+      organizationId: org.id,
+      campaignId,
+      hostname: hostnameRaw,
+      verificationToken: verification_token,
+    });
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
 
   revalidatePath('/dashboard/settings/domains');
   return { ok: true };
@@ -64,10 +72,12 @@ export async function addDomainAction(formData: FormData) {
 
 export async function verifyDomainAction(domainId: string) {
   const { org } = await authedProOrg();
-  const sb = createAdminClient();
 
-  const { data: row } = await sb.from('custom_domains').select('*').eq('id', domainId).eq('organization_id', org.id).maybeSingle();
-  if (!row) return { ok: false, error: 'Domain not found' };
+  const [row] = await db
+    .select()
+    .from(schema.customDomains)
+    .where(eq(schema.customDomains.id, domainId));
+  if (!row || row.organizationId !== org.id) return { ok: false, error: 'Domain not found' };
 
   let verified = false;
 
@@ -82,7 +92,7 @@ export async function verifyDomainAction(domainId: string) {
     try {
       const txt = await dns.resolveTxt(`_kudoso-verify.${row.hostname}`).catch(() => [] as string[][]);
       const flat = txt.map((arr) => arr.join('')).map((v) => v.trim());
-      if (flat.includes(row.verification_token)) verified = true;
+      if (flat.includes(row.verificationToken ?? '')) verified = true;
     } catch {}
   }
 
@@ -90,16 +100,19 @@ export async function verifyDomainAction(domainId: string) {
     return { ok: false, error: 'Could not verify DNS yet. Make sure the record has propagated (can take a few minutes), then try again.' };
   }
 
-  await sb.from('custom_domains').update({ verified_at: new Date().toISOString() }).eq('id', domainId);
+  await db.update(schema.customDomains).set({ verifiedAt: new Date() }).where(eq(schema.customDomains.id, domainId));
   revalidatePath('/dashboard/settings/domains');
   return { ok: true };
 }
 
 export async function deleteDomainAction(domainId: string) {
   const { org } = await authedProOrg();
-  const sb = createAdminClient();
-  const { error } = await sb.from('custom_domains').delete().eq('id', domainId).eq('organization_id', org.id);
-  if (error) return { ok: false, error: error.message };
+  try {
+    await db.delete(schema.customDomains)
+      .where(eq(schema.customDomains.id, domainId));
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
   revalidatePath('/dashboard/settings/domains');
   return { ok: true };
 }

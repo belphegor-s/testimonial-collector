@@ -1,26 +1,30 @@
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/auth';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { eq, desc } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { getActiveOrg } from '@/lib/org';
 import CampaignList from './CampaignList';
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const session = await auth();
+  if (!session?.user) redirect('/login');
 
-  const activeOrg = await getActiveOrg(user.id);
+  const activeOrg = await getActiveOrg(session.user.id!);
   if (!activeOrg) redirect('/login');
 
-  const sb = createAdminClient();
-  const { data: campaigns } = await sb
-    .from('campaigns')
-    .select('*')
-    .eq('organization_id', activeOrg.id)
-    .order('created_at', { ascending: false });
+  const campaigns = (await db
+    .select()
+    .from(schema.campaigns)
+    .where(eq(schema.campaigns.organizationId, activeOrg.id))
+    .orderBy(desc(schema.campaigns.createdAt))
+  ).map((c) => ({
+    id: c.id,
+    name: c.name,
+    brand_color: c.brandColor ?? '#18181b',
+    created_at: c.createdAt.toISOString(),
+  }));
 
   return (
     <div>
@@ -34,7 +38,7 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <CampaignList campaigns={campaigns ?? []} />
+      <CampaignList campaigns={campaigns} />
     </div>
   );
 }

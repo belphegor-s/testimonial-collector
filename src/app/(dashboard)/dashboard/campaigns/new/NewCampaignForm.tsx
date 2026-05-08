@@ -3,11 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import CampaignForm from '@/components/CampaignForm';
-import { createClient } from '@/lib/supabase/client';
 
 export default function NewCampaignForm({ organizationId }: { organizationId: string }) {
   const router = useRouter();
-  const supabase = createClient();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -15,31 +13,23 @@ export default function NewCampaignForm({ organizationId }: { organizationId: st
     setLoading(true);
     setError('');
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    const { data: res, error } = await supabase
-      .from('campaigns')
-      .insert({
+    const res = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         name: data.name,
         brand_color: data.brandColor,
         thank_you_message: data.thankYouMessage,
-        owner_id: user.id,
         organization_id: organizationId,
-      })
-      .select()
-      .single();
+      }),
+    });
 
-    if (error) {
-      setError(error.message);
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error ?? 'Failed to create campaign');
       setLoading(false);
     } else {
-      router.push(`/dashboard/campaigns/${res.id}`);
+      router.push(`/dashboard/campaigns/${json.id}`);
     }
   }
 

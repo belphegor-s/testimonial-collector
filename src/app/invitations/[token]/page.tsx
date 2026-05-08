@@ -1,19 +1,29 @@
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { redirect } from 'next/navigation';
+import { eq, isNull, and } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
+import { auth } from '@/auth';
 import Link from 'next/link';
 import AcceptInviteClient from './AcceptInviteClient';
 
 export default async function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const sb = createAdminClient();
-  const { data: invite } = await sb
-    .from('organization_invitations')
-    .select('*, organizations(name)')
-    .eq('token', token)
-    .is('accepted_at', null)
-    .single();
+  const [invite] = await db
+    .select({
+      id: schema.organizationInvitations.id,
+      organizationId: schema.organizationInvitations.organizationId,
+      role: schema.organizationInvitations.role,
+      token: schema.organizationInvitations.token,
+      expiresAt: schema.organizationInvitations.expiresAt,
+      acceptedAt: schema.organizationInvitations.acceptedAt,
+      orgName: schema.organizations.name,
+    })
+    .from(schema.organizationInvitations)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.organizationInvitations.organizationId))
+    .where(and(
+      eq(schema.organizationInvitations.token, token),
+      isNull(schema.organizationInvitations.acceptedAt),
+    ));
 
   if (!invite) {
     return (
@@ -30,7 +40,7 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
     );
   }
 
-  if (new Date(invite.expires_at) < new Date()) {
+  if (invite.expiresAt < new Date()) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
         <div className="bg-white border border-zinc-200 rounded-2xl p-8 max-w-sm w-full text-center">
@@ -42,12 +52,10 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
     );
   }
 
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  const session = await auth();
+  const orgName = invite.orgName ?? 'a workspace';
 
-  const orgName = (invite.organizations as any)?.name ?? 'a workspace';
-
-  if (!user) {
+  if (!session?.user) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
         <div className="bg-white border border-zinc-200 rounded-2xl p-8 max-w-sm w-full text-center">

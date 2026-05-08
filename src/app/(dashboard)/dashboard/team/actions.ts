@@ -1,7 +1,9 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/auth';
+import { eq, and, isNull } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { getActiveOrg, requireRole } from '@/lib/org';
 import { assertCanInviteMember } from '@/lib/plan';
 import { sendEmail } from '@/lib/cloudflare-email';
@@ -11,43 +13,46 @@ import { revalidatePath } from 'next/cache';
 import { escapeHtml } from '@/lib/utils';
 
 export async function inviteMember(orgId: string, email: string, role: 'admin' | 'member') {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const session = await auth();
+  if (!session?.user) throw new Error('Unauthorized');
 
-  await requireRole(orgId, user.id, ['owner', 'admin']);
+  await requireRole(orgId, session.user.id!, ['owner', 'admin']);
 
   const gate = await assertCanInviteMember(orgId);
   if (!gate.ok) throw new Error(gate.reason);
 
-  const sb = createAdminClient();
-
   // Check if already a member
-  const { data: existing } = await sb.from('organization_members').select('user_id').eq('organization_id', orgId).limit(1);
-  const { data: users } = await sb.rpc('get_users_by_email', { emails: [email] }).limit(1) as any;
-  if (users?.[0]) {
-    const alreadyMember = existing?.some((m: any) => m.user_id === users[0].id);
+  const [existingUser] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.email, email.toLowerCase()));
+
+  if (existingUser) {
+    const [alreadyMember] = await db
+      .select({ userId: schema.organizationMembers.userId })
+      .from(schema.organizationMembers)
+      .where(and(eq(schema.organizationMembers.organizationId, orgId), eq(schema.organizationMembers.userId, existingUser.id)));
     if (alreadyMember) throw new Error('This user is already a member of this organization.');
   }
 
   const token = randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  const { error } = await sb.from('organization_invitations').insert({
-    organization_id: orgId,
-    email: email.toLowerCase(),
-    role,
-    invited_by: user.id,
-    token,
-    expires_at: expiresAt,
-  });
-
-  if (error) {
-    if (error.code === '23505') throw new Error('An invitation has already been sent to this email.');
-    throw new Error(error.message);
+  try {
+    await db.insert(schema.organizationInvitations).values({
+      organizationId: orgId,
+      email: email.toLowerCase(),
+      role,
+      invitedBy: session.user.id,
+      token,
+      expiresAt,
+    });
+  } catch (e: any) {
+    if (e.code === '23505') throw new Error('An invitation has already been sent to this email.');
+    throw new Error(e.message);
   }
 
-  const { data: org } = await sb.from('organizations').select('name').eq('id', orgId).single();
+  const [org] = await db.select({ name: schema.organizations.name }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
   await sendEmail({
@@ -56,9 +61,6 @@ export async function inviteMember(orgId: string, email: string, role: 'admin' |
     subject: `You've been invited to join ${escapeHtml(org?.name ?? 'a Kudoso workspace')}`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;">
-        <div style="width:40px;height:40px;border-radius:10px;background:#ecfdf5;display:flex;align-items:center;justify-content:center;margin-bottom:24px;">
-          <div style="width:16px;height:16px;border-radius:50%;background:#10b981;"></div>
-        </div>
         <h1 style="font-size:18px;font-weight:600;color:#18181b;margin:0 0 8px;">You're invited to ${escapeHtml(org?.name ?? 'a workspace')} on Kudoso</h1>
         <p style="font-size:14px;color:#52525b;line-height:1.6;margin:0 0 24px;">
           You've been invited as a <strong>${role}</strong>. Click below to accept and get started.
@@ -75,79 +77,68 @@ export async function inviteMember(orgId: string, email: string, role: 'admin' |
 }
 
 export async function revokeInvitation(inviteId: string) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const session = await auth();
+  if (!session?.user) throw new Error('Unauthorized');
 
-  const sb = createAdminClient();
-  const { data: invite } = await sb.from('organization_invitations').select('organization_id').eq('id', inviteId).single();
+  const [invite] = await db
+    .select({ organizationId: schema.organizationInvitations.organizationId })
+    .from(schema.organizationInvitations)
+    .where(eq(schema.organizationInvitations.id, inviteId));
   if (!invite) throw new Error('Invitation not found');
 
-  await requireRole(invite.organization_id, user.id, ['owner', 'admin']);
-  await sb.from('organization_invitations').delete().eq('id', inviteId);
+  await requireRole(invite.organizationId, session.user.id!, ['owner', 'admin']);
+  await db.delete(schema.organizationInvitations).where(eq(schema.organizationInvitations.id, inviteId));
   revalidatePath('/dashboard/team');
 }
 
 export async function removeMember(orgId: string, targetUserId: string) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const session = await auth();
+  if (!session?.user) throw new Error('Unauthorized');
 
-  await requireRole(orgId, user.id, ['owner', 'admin']);
+  await requireRole(orgId, session.user.id!, ['owner', 'admin']);
 
-  const sb = createAdminClient();
-  const { data: org } = await sb.from('organizations').select('owner_id').eq('id', orgId).single();
-  if (org?.owner_id === targetUserId) throw new Error('Cannot remove the owner. Transfer ownership first.');
+  const [org] = await db.select({ ownerId: schema.organizations.ownerId }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  if (org?.ownerId === targetUserId) throw new Error('Cannot remove the owner. Transfer ownership first.');
 
-  await sb.from('organization_members').delete().eq('organization_id', orgId).eq('user_id', targetUserId);
+  await db.delete(schema.organizationMembers)
+    .where(and(eq(schema.organizationMembers.organizationId, orgId), eq(schema.organizationMembers.userId, targetUserId)));
   revalidatePath('/dashboard/team');
 }
 
 export async function updateMemberRole(orgId: string, targetUserId: string, newRole: 'admin' | 'member') {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const session = await auth();
+  if (!session?.user) throw new Error('Unauthorized');
 
-  await requireRole(orgId, user.id, ['owner']);
+  await requireRole(orgId, session.user.id!, ['owner']);
 
-  const sb = createAdminClient();
-  const { data: org } = await sb.from('organizations').select('owner_id').eq('id', orgId).single();
-  if (org?.owner_id === targetUserId) throw new Error('Cannot change the owner role.');
+  const [org] = await db.select({ ownerId: schema.organizations.ownerId }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  if (org?.ownerId === targetUserId) throw new Error('Cannot change the owner role.');
 
-  await sb.from('organization_members').update({ role: newRole }).eq('organization_id', orgId).eq('user_id', targetUserId);
+  await db.update(schema.organizationMembers)
+    .set({ role: newRole })
+    .where(and(eq(schema.organizationMembers.organizationId, orgId), eq(schema.organizationMembers.userId, targetUserId)));
   revalidatePath('/dashboard/team');
 }
 
 export async function acceptInvitation(token: string) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
+  const session = await auth();
+  if (!session?.user) throw new Error('Unauthorized');
 
-  const sb = createAdminClient();
-  const { data: invite } = await sb
-    .from('organization_invitations')
-    .select('*')
-    .eq('token', token)
-    .is('accepted_at', null)
-    .single();
+  const [invite] = await db
+    .select()
+    .from(schema.organizationInvitations)
+    .where(and(eq(schema.organizationInvitations.token, token), isNull(schema.organizationInvitations.acceptedAt)));
 
   if (!invite) throw new Error('Invitation not found or already used.');
-  if (new Date(invite.expires_at) < new Date()) throw new Error('This invitation has expired.');
+  if (invite.expiresAt < new Date()) throw new Error('This invitation has expired.');
 
-  const { data: existingMember } = await sb
-    .from('organization_members')
-    .select('id')
-    .eq('organization_id', invite.organization_id)
-    .eq('user_id', user.id)
-    .maybeSingle();
+  await db.insert(schema.organizationMembers).values({
+    organizationId: invite.organizationId,
+    userId: session.user.id!,
+    role: invite.role,
+  }).onConflictDoNothing();
 
-  if (!existingMember) {
-    await sb.from('organization_members').insert({
-      organization_id: invite.organization_id,
-      user_id: user.id,
-      role: invite.role,
-    });
-  }
-
-  await sb.from('organization_invitations').update({ accepted_at: new Date().toISOString() }).eq('id', invite.id);
+  await db.update(schema.organizationInvitations)
+    .set({ acceptedAt: new Date() })
+    .where(eq(schema.organizationInvitations.id, invite.id));
 }

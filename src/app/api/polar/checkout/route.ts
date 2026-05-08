@@ -1,15 +1,12 @@
-import { createClient } from '@/lib/supabase/server';
+import { auth } from '@/auth';
 import { ensureProducts, ensureAddonProducts, polar, appUrl } from '@/lib/polar';
 import { getActiveOrg } from '@/lib/org';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const activeOrg = await getActiveOrg(user.id);
+  const activeOrg = await getActiveOrg(session.user.id!);
   if (!activeOrg) return Response.json({ error: 'No active organization' }, { status: 400 });
 
   let interval: 'month' | 'year' = 'month';
@@ -20,7 +17,6 @@ export async function POST(req: Request) {
     if (body?.product && typeof body.product === 'string') addonProduct = body.product;
   } catch {}
 
-  // Handle add-on credit pack checkout
   if (addonProduct) {
     let addonIds;
     try {
@@ -34,21 +30,20 @@ export async function POST(req: Request) {
     if (!productId) return Response.json({ error: 'Unknown product' }, { status: 400 });
 
     try {
-      const session = await polar().checkouts.create({
+      const session2 = await polar().checkouts.create({
         products: [productId],
         successUrl: `${appUrl()}/dashboard/billing?status=credits_added`,
-        customerEmail: user.email ?? undefined,
+        customerEmail: session.user.email ?? undefined,
         externalCustomerId: activeOrg.id,
         metadata: { organization_id: activeOrg.id, addon: addonProduct },
       });
-      return Response.json({ url: session.url });
+      return Response.json({ url: session2.url });
     } catch (err) {
       console.error('[polar/checkout] addon create failed', err);
       return Response.json({ error: 'Could not start checkout' }, { status: 500 });
     }
   }
 
-  // Handle Pro subscription checkout
   let products;
   try {
     products = await ensureProducts();
@@ -60,15 +55,15 @@ export async function POST(req: Request) {
   const productId = interval === 'year' ? products.pro_yearly : products.pro_monthly;
 
   try {
-    const session = await polar().checkouts.create({
+    const session2 = await polar().checkouts.create({
       products: [productId],
       successUrl: `${appUrl()}/dashboard/billing?status=success&checkout_id={CHECKOUT_ID}`,
-      customerEmail: user.email ?? undefined,
+      customerEmail: session.user.email ?? undefined,
       externalCustomerId: activeOrg.id,
       metadata: { organization_id: activeOrg.id, interval },
     });
 
-    return Response.json({ url: session.url });
+    return Response.json({ url: session2.url });
   } catch (err) {
     console.error('[polar/checkout] create failed', err);
     return Response.json({ error: 'Could not start checkout' }, { status: 500 });

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { CopyButton } from '@/components/CopyButton';
 import Toggle from '@/components/Toggle';
 import {
@@ -316,6 +316,7 @@ new ResizeObserver(function(){
   const [sentimentCached, setSentimentCached] = useState(false);
 
   const brandColor = campaign.brand_color || '#6366f1';
+  const reduced = useReducedMotion();
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // ── URL param sync ─────────────────────────────────────
@@ -513,7 +514,7 @@ new ResizeObserver(function(){
       </div>
 
       {/* ── Tab bar ───────────────────────────────────── */}
-      <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1 mb-6">
+      <div className="relative flex items-center gap-1 bg-zinc-100 rounded-xl p-1 mb-6">
         {tabDefs.map((t) => (
           <button
             key={t.key}
@@ -521,8 +522,16 @@ new ResizeObserver(function(){
               setTab(t.key);
               if (t.key === 'analytics') loadSentiment();
             }}
-            className={`flex flex-1 items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            className={`relative flex flex-1 items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.key ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
           >
+            {tab === t.key && (
+              <motion.span
+                layoutId={reduced ? undefined : 'tab-pill'}
+                className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                style={{ zIndex: -1 }}
+                transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
             <t.icon size={15} />
             <span className="hidden sm:inline">{t.label}</span>
           </button>
@@ -537,9 +546,17 @@ new ResizeObserver(function(){
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize whitespace-nowrap ${filter === f ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-700'}`}
+                className="relative px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize whitespace-nowrap"
               >
-                {f}
+                {filter === f && (
+                  <motion.span
+                    layoutId={reduced ? undefined : 'filter-pill'}
+                    className="absolute inset-0 bg-zinc-900 rounded-md"
+                    style={{ zIndex: -1 }}
+                    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className={`relative z-10 ${filter === f ? 'text-white' : 'text-zinc-500 hover:text-zinc-700'}`}>{f}</span>
               </button>
             ))}
           </div>
@@ -571,6 +588,16 @@ new ResizeObserver(function(){
           </div>
         </div>
       )}
+
+      {/* ── Tab content ──────────────────────────────── */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={reduced ? undefined : { opacity: 0, y: 6 }}
+          animate={reduced ? undefined : { opacity: 1, y: 0 }}
+          exit={reduced ? undefined : { opacity: 0, y: -6 }}
+          transition={{ duration: 0.15 }}
+        >
 
       {/* ── Overview (card grid) ──────────────────────── */}
       {tab === 'overview' && (
@@ -1261,6 +1288,9 @@ new ResizeObserver(function(){
           </div>
         </div>
       )}
+
+        </motion.div>
+      </AnimatePresence>
 
       {/* ── Detail modal ──────────────────────────────── */}
       <AnimatePresence>

@@ -1,26 +1,44 @@
 import 'server-only';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { eq, sql } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import * as schema from '@/lib/db/schema';
 import { canAccessCampaign } from '@/lib/org';
 import { getOrgPlan } from '@/lib/plan';
 
 export async function getAiCredits(orgId: string): Promise<number> {
-  const sb = createAdminClient();
-  const { data } = await sb.from('organizations').select('ai_credits').eq('id', orgId).maybeSingle();
-  return data?.ai_credits ?? 0;
+  const [row] = await db
+    .select({ aiCredits: schema.organizations.aiCredits })
+    .from(schema.organizations)
+    .where(eq(schema.organizations.id, orgId));
+  return row?.aiCredits ?? 0;
 }
 
 export async function grantAiCredits(orgId: string, delta: number, reason: string, referenceId?: string): Promise<void> {
-  const sb = createAdminClient();
-  await sb.rpc('increment_ai_credits', { org_id: orgId, amount: delta });
-  await sb.from('ai_credit_ledger').insert({ organization_id: orgId, delta, reason, reference_id: referenceId ?? null });
+  await db.update(schema.organizations)
+    .set({ aiCredits: sql`ai_credits + ${delta}` })
+    .where(eq(schema.organizations.id, orgId));
+  await db.insert(schema.aiCreditLedger).values({
+    organizationId: orgId,
+    delta,
+    reason,
+    referenceId: referenceId ?? null,
+  });
 }
 
 export async function deductAiCredit(orgId: string, reason: string, referenceId?: string): Promise<{ ok: boolean; remaining: number }> {
-  const sb = createAdminClient();
-  const { data } = await sb.rpc('deduct_ai_credit', { org_id: orgId });
-  if (data === null || data < 0) return { ok: false, remaining: 0 };
-  await sb.from('ai_credit_ledger').insert({ organization_id: orgId, delta: -1, reason, reference_id: referenceId ?? null });
-  return { ok: true, remaining: data };
+  const result = await db.execute<{ ai_credits: number }>(
+    sql`UPDATE organizations SET ai_credits = ai_credits - 1 WHERE id = ${orgId} AND ai_credits > 0 RETURNING ai_credits`
+  );
+  const rows = result.rows ?? [];
+  if (rows.length === 0) return { ok: false, remaining: 0 };
+  const remaining = (rows[0] as any).ai_credits ?? 0;
+  await db.insert(schema.aiCreditLedger).values({
+    organizationId: orgId,
+    delta: -1,
+    reason,
+    referenceId: referenceId ?? null,
+  });
+  return { ok: true, remaining };
 }
 
 export async function checkAiAccess(userId: string, campaignId: string): Promise<{ ok: boolean; reason?: string; orgId?: string }> {
